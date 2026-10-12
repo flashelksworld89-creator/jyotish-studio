@@ -8,7 +8,7 @@ const degreeWithinSign=x=>{const n=Math.floor((mod(x)%30)*3600+1e-8);return Stri
 const H=365.2425*86400000;
 let swe;
 const esc=x=>String(x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-async function init(){try{validateRelationshipModel();swe=new SwissEphemeris(); await swe.init(); swe.setSiderealMode(SiderealMode.Lahiri); $('status').textContent='Calculation engine ready. Enter birth details and generate.'; $('calculate').disabled=false}catch(e){$('status').textContent='Ephemeris failed to load: '+e.message;$('status').classList.add('error');$('calculate').disabled=true}}
+async function init(){try{verifyNavamsa();validateRelationshipModel();swe=new SwissEphemeris(); await swe.init(); swe.setSiderealMode(SiderealMode.Lahiri); $('status').textContent='Calculation engine ready. Enter birth details and generate.'; $('calculate').disabled=false}catch(e){$('status').textContent='Ephemeris failed to load: '+e.message;$('status').classList.add('error');$('calculate').disabled=true}}
 $('calculate').disabled=true;
 let selectedLocation=null;
 const placeInput=document.querySelector('[name="place"]'), latInput=document.querySelector('[name="lat"]'), lonInput=document.querySelector('[name="lon"]'), offsetInput=document.querySelector('[name="offset"]');
@@ -393,6 +393,26 @@ function renderJaimini(data){
 }
 $('jaimini-sign').addEventListener('change',()=>{if(mostRecentChart)renderJaimini(mostRecentChart)});
 
+// Parashari Navamsa: movable signs begin with themselves, fixed from ninth, dual from fifth.
+function navamsaSign(longitude){
+ const z=sign(longitude),part=Math.min(8,Math.floor((mod(longitude)%30)/(30/9)));
+ const first=(z+(z%3===0?0:z%3===1?8:4))%12;
+ return (first+part)%12;
+}
+function verifyNavamsa(){
+ const checks=[[0,0],[3.34,1],[30,9],[60,4],[120,4],[150,2],[359.9,11]];
+ for(const [longitude,expected] of checks)if(navamsaSign(longitude)!==expected)throw Error('Navamsa calculation verification failed at '+longitude);
+}
+function navamsaDignity(n,longitude){
+ const d=DIGNITY_SIGNS[n],z=navamsaSign(longitude);
+ if(!d)return 'Not assessed';
+ return d.exalt===z?'Exaltation sign':d.debil===z?'Debilitation sign':d.own.includes(z)?'Own sign':'Other sign';
+}
+function renderNavamsa(data){
+ const p=data.positions,el=$('navamsa');
+ if(!el)return;
+ el.innerHTML='<p class="subtle">D9 positions are derived from exact Lahiri sidereal D1 longitudes. This is a divisional sign calculation—not a separately calculated D9 ascendant or a Shadbala score.</p><table class="positions-table"><thead><tr><th>Planet</th><th>D1</th><th>D9 sign</th><th>D9 condition</th></tr></thead><tbody>'+['Sun','Moon','Mars','Mercury','Jupiter','Venus','Saturn','Rahu','Ketu'].map(n=>'<tr><td>'+esc(n)+'</td><td>'+esc(fmt(p[n]))+'</td><td>'+esc(Z[navamsaSign(p[n])])+'</td><td>'+esc(navamsaDignity(n,p[n]))+'</td></tr>').join('')+'</tbody></table>';
+}
 const COMBUST_ORBS={Moon:12,Mars:17,Mercury:14,Jupiter:11,Venus:10,Saturn:15};
 function angularSeparation(a,b){const d=Math.abs(mod(a)-mod(b));return Math.min(d,360-d)}
 function yogaConditionReview(y,p,r){
@@ -402,7 +422,9 @@ function yogaConditionReview(y,p,r){
  for(const n of participants){
    if(n==='Rahu'||n==='Ketu')continue;
    const condition=planetCondition(n,p);
-   dignity.push(n+': '+condition);
+   dignity.push(n+': D1 '+condition+'; D9 '+Z[navamsaSign(p[n])]+' ('+navamsaDignity(n,p[n])+')');
+   if(navamsaDignity(n,p[n])==='Own sign'||navamsaDignity(n,p[n])==='Exaltation sign')positive.push(n+' has supportive D9 sign dignity');
+   if(navamsaDignity(n,p[n])==='Debilitation sign')cautions.push(n+' occupies D9 debilitation sign (does not by itself cancel a D1 yoga)');
    if(condition==='Exaltation sign'||condition==='Own sign')positive.push(n+' is '+condition.toLowerCase());
    if(condition==='Debilitation sign')cautions.push(n+' occupies its debilitation sign');
    if(n!=='Sun'&&COMBUST_ORBS[n]!==undefined){
@@ -426,6 +448,7 @@ $('highlights').innerHTML=a.map(([label,value,detail])=>'<div class="highlight">
 renderWheel(p);$('positions').innerHTML='<table class="positions-table"><thead><tr><th>Body</th><th>Position</th><th>House</th></tr></thead><tbody>'+['Asc',...P].map(n=>'<tr><td>'+G[n]+' '+n+'</td><td>'+fmt(p[n])+'</td><td>'+(n==='Asc'?'—':house(p[n],p.Asc))+'</td></tr>').join('')+'</tbody></table><p class="subtle">Lahiri ayanamsa: '+ayanamsa.toFixed(5)+'°. Mean Rahu (Ketu exactly opposite). Planet coordinates: Moshier fallback. Ascendant: tropical house calculation minus Lahiri offset.</p>';
 renderDasha(data);
 renderAspects(data);
+renderNavamsa(data);
 renderNadi(data);
 renderJaimini(data);
 if($('relationship-audit')){$('relationship-audit').innerHTML='<p><b>Shared relationship calculations:</b> '+relationships.conjunctions.length+' same-sign pairs · '+relationships.parashari.length+' directional Parashari sign aspects · '+relationships.jaimini.length+' directional Jaimini sign aspects.</p><p>Whole-sign houses from sidereal ascendant. Computed aspects indicate sign relationships; they do not by themselves establish strength, orb or a yoga. Nadi-inspired sign-connection analysis is provided separately and is not interchangeable with graha drishti.</p>';}
