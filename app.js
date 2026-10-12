@@ -432,12 +432,22 @@ function uchchaBala(n,longitude){
 }
 function naisargikaBala(n){return 60*NATURAL_RANK[n]/7}
 function verifyStrengthComponents(){
+ const fixed={Asc:0,Sun:0,Moon:30,Mars:90,Mercury:180,Jupiter:270,Venus:330,Saturn:45};
+ if(kendradiBala('Sun',fixed)!==60||kendradiBala('Moon',fixed)!==30||kendradiBala('Mars',fixed)!==15)throw Error('Kendradi fixture failed');
  for(const n of Object.keys(EXALTATION_LONGITUDE)){
   if(Math.abs(uchchaBala(n,EXALTATION_LONGITUDE[n])-60)>1e-8 ||
      Math.abs(uchchaBala(n,mod(EXALTATION_LONGITUDE[n]+180)))>1e-8)
      throw Error('Uchcha Bala fixture failed for '+n);
  }
  if(Math.abs(naisargikaBala('Saturn')-60/7)>1e-8)throw Error('Naisargika Bala fixture failed');
+}
+function kendradiBala(n,p){
+ const h=house(p[n],p.Asc);
+ return [1,4,7,10].includes(h)?60:[2,5,8,11].includes(h)?30:15;
+}
+function ojayugmaBala(n,p){
+ const wantsEven=['Moon','Venus'].includes(n),match=z=>((z+1)%2===0)===wantsEven;
+ return (match(sign(p[n]))?15:0)+(match(navamsaSign(p[n]))?15:0);
 }
 function renderStrengthFoundation(data){
  const el=$('strength-foundation');if(!el)return;
@@ -447,9 +457,9 @@ function renderStrengthFoundation(data){
   const d1=planetCondition(n,p),d9=navamsaDignity(n,p[n]);
   const separation=n==='Sun'?null:angularSeparation(p[n],p.Sun);
   const combustion=n==='Sun'?'N/A':(separation<=COMBUST_ORBS[n]?'Proximity flag '+separation.toFixed(1)+'°':'No proximity flag');
-  return '<tr><td>'+esc(n)+'</td><td>'+uchchaBala(n,p[n]).toFixed(2)+'</td><td>'+naisargikaBala(n).toFixed(2)+'</td><td>'+esc(d1)+' / '+esc(d9)+'</td><td>'+esc(combustion)+'</td></tr>';
+  return '<tr><td>'+esc(n)+'</td><td>'+uchchaBala(n,p[n]).toFixed(2)+'</td><td>'+ojayugmaBala(n,p)+'</td><td>'+kendradiBala(n,p)+'</td><td>'+naisargikaBala(n).toFixed(2)+'</td><td>'+esc(d1)+' / '+esc(d9)+'</td><td>'+esc(combustion)+'</td></tr>';
  });
- el.innerHTML='<p class="subtle"><b>Classical Shadbala: partial calculations only.</b> Values are in virupas (60 virupas = 1 rupa). Uchcha Bala is one subdivision of Sthana Bala, not the complete Sthana Bala. Naisargika Bala is one complete fixed component. No combined total or strength ranking is displayed because other components are missing.</p><table class="positions-table"><thead><tr><th>Planet</th><th>Uchcha Bala</th><th>Naisargika</th><th>D1 / D9 dignity</th><th>Sun proximity</th></tr></thead><tbody>'+rows.join('')+'</tbody></table><div class="shadbala-status"><strong>Component coverage</strong><p>Sthana Bala: Uchcha subdivision implemented; other subdivisions pending.</p><p>Dig Bala: pending · Kala Bala: pending · Cheshta Bala: pending · Naisargika Bala: implemented · Drik Bala: pending.</p></div>';
+ el.innerHTML='<p class="subtle"><b>Classical Shadbala: partial calculations only.</b> Values are in virupas (60 virupas = 1 rupa). Uchcha, Ojayugma and Kendradi are subdivisions of Sthana Bala, not the complete Sthana Bala. Naisargika Bala is one complete fixed component. No combined total or strength ranking is displayed because other components are missing.</p><table class="positions-table"><thead><tr><th>Planet</th><th>Uchcha</th><th>Ojayugma</th><th>Kendradi</th><th>Naisargika</th><th>D1 / D9 dignity</th><th>Sun proximity</th></tr></thead><tbody>'+rows.join('')+'</tbody></table><div class="shadbala-status"><strong>Component coverage</strong><p>Sthana Bala: Uchcha, Ojayugma and whole-sign Kendradi subdivisions implemented; Saptavargaja and Drekkana pending.</p><p>Dig Bala: pending · Kala Bala: pending · Cheshta Bala: pending · Naisargika Bala: implemented · Drik Bala: pending.</p></div>';
 }
 const COMBUST_ORBS={Moon:12,Mars:17,Mercury:14,Jupiter:11,Venus:10,Saturn:15};
 function angularSeparation(a,b){const d=Math.abs(mod(a)-mod(b));return Math.min(d,360-d)}
