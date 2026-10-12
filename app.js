@@ -482,11 +482,12 @@ function classicalVargaSign(longitude,division){
 }
 const NATURAL_FRIENDS={Sun:['Moon','Mars','Jupiter'],Moon:['Sun','Mercury'],Mars:['Sun','Moon','Jupiter'],Mercury:['Sun','Venus'],Jupiter:['Sun','Moon','Mars'],Venus:['Mercury','Saturn'],Saturn:['Mercury','Venus']};
 const NATURAL_ENEMIES={Sun:['Venus','Saturn'],Moon:[],Mars:['Mercury'],Mercury:['Moon'],Jupiter:['Mercury','Venus'],Venus:['Sun','Moon'],Saturn:['Sun','Moon','Mars']};
-const MOOLATRIKONA={Sun:4,Moon:1,Mars:0,Mercury:5,Jupiter:8,Venus:6,Saturn:10};
+const MOOLATRIKONA={Sun:[4,0,20],Moon:[1,4,30],Mars:[0,0,12],Mercury:[5,16,20],Jupiter:[8,0,10],Venus:[6,0,15],Saturn:[10,0,20]};
 const VARGA_SCORE={greatFriend:22.5,friend:15,neutral:7.5,enemy:3.75,greatEnemy:1.875};
 function saptavargajaEntry(n,vargaSign,positions,division){
  const lord=RULERS[vargaSign];
- if(division===1&&MOOLATRIKONA[n]===vargaSign)return {points:45,grade:'Moolatrikona (D1 sign screen)'};
+ const [mSign,mStart,mEnd]=MOOLATRIKONA[n],deg=mod(positions[n])%30;
+ if(division===1&&vargaSign===mSign&&deg>=mStart&&deg<mEnd)return {points:45,grade:'Moolatrikona (D1 degree band)'};
  if(lord===n)return {points:30,grade:'Own sign'};
  const natural=NATURAL_FRIENDS[n].includes(lord)?1:NATURAL_ENEMIES[n].includes(lord)?-1:0;
  // Temporary friendship is evaluated from natal D1 signs, including same-sign enemies.
@@ -505,7 +506,7 @@ function saptavargajaBala(n,positions){
 }
 function verifyVargaSubdivisions(){
  const planets=['Sun','Moon','Mars','Mercury','Jupiter','Venus','Saturn'];
- const fixture={Sun:0,Moon:30,Mars:60,Mercury:90,Jupiter:120,Venus:150,Saturn:180};
+ const fixture={Sun:120,Moon:34,Mars:5,Mercury:166,Jupiter:245,Venus:190,Saturn:310};
  if(saptavargajaEntry('Mars',0,fixture,1).points!==45||saptavargajaEntry('Sun',4,fixture,9).points!==30)throw Error('Saptavargaja own and Moolatrikona score fixture failed');
  if(drekkanaBala('Sun',0)!==15||drekkanaBala('Mercury',15)!==15||drekkanaBala('Venus',25)!==15||drekkanaBala('Sun',25)!==0)throw Error('Drekkana Bala verification failed');
  for(const n of [1,2,3,7,9,12,30])for(const x of [0,4.999,5,14.999,15,29.999,30,179.99,359.99]){
@@ -523,8 +524,8 @@ function renderStrengthFoundation(data){
   const combustion=n==='Sun'?'N/A':(separation<=COMBUST_ORBS[n]?'Proximity flag '+separation.toFixed(1)+'°':'No proximity flag');
   return '<tr><td>'+esc(n)+'</td><td>'+uchchaBala(n,p[n]).toFixed(2)+'</td><td>'+ojayugmaBala(n,p)+'</td><td>'+kendradiBala(n,p)+'</td><td>'+drekkanaBala(n,p[n])+'</td><td>'+sap.total.toFixed(2)+'</td><td>'+(dig===null?'N/A':dig.toFixed(2))+'</td><td>'+naisargikaBala(n).toFixed(2)+'</td><td>'+esc(d1)+' / '+esc(d9)+'</td><td>'+esc(combustion)+'</td></tr>';
  });
- const vargaDisplay='<details class="shadbala-status"><summary>Seven classical varga placements (D1/D2/D3/D7/D9/D12/D30)</summary><div class="varga-table-wrap"><table class="positions-table"><thead><tr><th>Planet</th>'+[1,2,3,7,9,12,30].map(k=>'<th>D'+k+'</th>').join('')+'</tr></thead><tbody>'+classical.map(n=>'<tr><td>'+esc(n)+'</td>'+saptavargajaBala(n,p).entries.map(e=>'<td>'+esc(Z[e.sign])+'<small> '+e.points.toFixed(2)+' V</small></td>').join('')+'</tr>').join('')+'</tbody></table></div><p class="subtle">Saptavargaja Bala uses natal D1 temporary friendship (2nd/3rd/4th/10th/11th/12th), directional natural friendship and compound dignity. Moolatrikona scores 45 only in D1; other vargas in an own sign score 30. Points use the 22.5/15/7.5/3.75/1.875 Virupa convention. D2 and D30 use specified Parashari conventions.</p></details>';
- el.innerHTML='<p class="subtle"><b>Classical Shadbala: partial calculations only.</b> Values are in virupas (60 virupas = 1 rupa). Uchcha, Ojayugma, Kendradi and Drekkana are subdivisions of Sthana Bala, not the complete Sthana Bala. Naisargika Bala is one complete fixed component. No combined total or strength ranking is displayed because other components are missing.</p><table class="positions-table"><thead><tr><th>Planet</th><th>Uchcha</th><th>Ojayugma</th><th>Kendradi</th><th>Drekkana</th><th>Saptavargaja</th><th>Dig Bala</th><th>Naisargika</th><th>D1 / D9 dignity</th><th>Sun proximity</th></tr></thead><tbody>'+rows.join('')+'</tbody></table>'+vargaDisplay+'<div class="shadbala-status"><strong>Component coverage</strong><p>Sthana Bala: Uchcha, Saptavargaja, Ojayugma, whole-sign Kendradi and Drekkana implemented as separate components; comparison to independent reference charts remains pending.</p><p>Dig Bala: calculated from true sidereal Ascendant/MC angles · Kala Bala: pending · Cheshta Bala: pending · Naisargika Bala: implemented · Drik Bala: pending.</p></div>';
+ const vargaDisplay='<details class="shadbala-status"><summary>Seven classical varga placements (D1/D2/D3/D7/D9/D12/D30)</summary><div class="varga-table-wrap"><table class="positions-table"><thead><tr><th>Planet</th>'+[1,2,3,7,9,12,30].map(k=>'<th>D'+k+'</th>').join('')+'</tr></thead><tbody>'+classical.map(n=>'<tr><td>'+esc(n)+'</td>'+saptavargajaBala(n,p).entries.map(e=>'<td>'+esc(Z[e.sign])+'<small> '+e.points.toFixed(2)+' V</small></td>').join('')+'</tr>').join('')+'</tbody></table></div><p class="subtle">Saptavargaja Bala uses natal D1 temporary friendship (2nd/3rd/4th/10th/11th/12th), directional natural friendship and compound dignity. Moolatrikona scores 45 only in its D1 degree band; other vargas in an own sign score 30. Points use the 22.5/15/7.5/3.75/1.875 Virupa convention. D2 and D30 use specified Parashari conventions.</p></details>';
+ el.innerHTML='<p class="subtle"><b>Classical Shadbala: partial calculations only.</b> Values are in virupas (60 virupas = 1 rupa). Uchcha, Saptavargaja, Ojayugma, Kendradi and Drekkana are subdivisions of Sthana Bala, not the complete Sthana Bala. Naisargika Bala is one complete fixed component. No combined total or strength ranking is displayed because other components are missing.</p><table class="positions-table"><thead><tr><th>Planet</th><th>Uchcha</th><th>Ojayugma</th><th>Kendradi</th><th>Drekkana</th><th>Saptavargaja</th><th>Dig Bala</th><th>Naisargika</th><th>D1 / D9 dignity</th><th>Sun proximity</th></tr></thead><tbody>'+rows.join('')+'</tbody></table>'+vargaDisplay+'<div class="shadbala-status"><strong>Component coverage</strong><p>Sthana Bala: Uchcha, Saptavargaja, Ojayugma, whole-sign Kendradi and Drekkana implemented as separate components; comparison to independent reference charts remains pending.</p><p>Dig Bala: calculated from true sidereal Ascendant/MC angles · Kala Bala: pending · Cheshta Bala: pending · Naisargika Bala: implemented · Drik Bala: pending.</p></div>';
 }
 const COMBUST_ORBS={Moon:12,Mars:17,Mercury:14,Jupiter:11,Venus:10,Saturn:15};
 function angularSeparation(a,b){const d=Math.abs(mod(a)-mod(b));return Math.min(d,360-d)}
