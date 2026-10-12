@@ -173,7 +173,7 @@ function renderDasha(data){
 $('dasha-system').addEventListener('change',()=>{if(mostRecentChart)renderDasha(mostRecentChart)});
 $('dasha-year').addEventListener('change',()=>{if(mostRecentChart)renderDasha(mostRecentChart)});
 $('dasha-reference').addEventListener('change',()=>{if(mostRecentChart)renderDasha(mostRecentChart)});
-function yogas(p){
+function yogas(p,relationships){
  const result=[],asc=p.Asc,hs=n=>house(p[n],asc),same=(a,b)=>sign(p[a])===sign(p[b]);
  const add=(category,title,proof,reading,caveat='Strength, aspects, combustion and cancellations have not been fully assessed.')=>result.push({category,title,proof,reading,caveat});
  const l=n=>RULERS[(sign(asc)+n-1)%12],inK=n=>[1,4,7,10].includes(hs(n)),inT=n=>[1,5,9].includes(hs(n));
@@ -186,8 +186,8 @@ function yogas(p){
  for(const n of Object.keys(own))if(inK(n)&&(own[n].includes(sign(p[n]))||exalt[n]===sign(p[n])))add('Mahapurusha',names[n]+' Mahapurusha Yoga',n+' '+fmt(p[n])+' in natal house '+hs(n)+' ('+(own[n].includes(sign(p[n]))?'own':'exalted')+' sign).','Traditionally associated with the prominence of '+n+' qualities.');
  const nine=l(9),ten=l(10);
  if(nine!==ten&&(same(nine,ten)||exchange(nine,ten)))add('Raja','Dharma–Karma Adhipati Yoga','9th lord '+nine+' and 10th lord '+ten+' '+(same(nine,ten)?'conjoin in '+Z[sign(p[nine])]:'exchange their occupied signs')+'.','Traditionally connects fortune, purpose and professional responsibility.');
- for(const a of [1,4,5,7,9,10])for(const b of [1,4,5,7,9,10]){
-   if(a>=b||![1,5,9].includes(a)||![1,4,7,10].includes(b))continue;
+ for(const a of [1,5,9])for(const b of [1,4,7,10]){
+   if(a===b)continue;
    const x=l(a),y=l(b);
    if(x!==y&&(same(x,y)||exchange(x,y)))add('Raja','Kendra–Trikona Raja Yoga ('+a+'th / '+b+'th)','House '+a+' lord '+x+' and house '+b+' lord '+y+' '+(same(x,y)?'occupy '+Z[sign(p[x])]+' together':'are in sign exchange')+'.','A potential connection of trinal and angular lordships.','This is a conjunction/exchange screening rule, not full Parashari aspect evaluation or a confirmed strong Raja Yoga.');
  }
@@ -202,6 +202,54 @@ function yogas(p){
  if(sunapha.length&&anapha.length)add('Lunar','Durudhara Yoga','Planets on both sides of Moon: '+sunapha.join(', ')+' / '+anapha.join(', ')+'.','A traditional lunar support combination.');
  const occupied=n=>P.filter(q=>q!==n&&sign(p[q])===sign(p[n]));
  if(occupied('Moon').filter(n=>!['Rahu','Ketu'].includes(n)).length===0&&!sunapha.length&&!anapha.length&&!inK('Moon'))add('Lunar','Kemadruma screening indication','Moon has no sign conjunction and no qualifying planets in adjacent signs; Moon is not in a natal kendra.','Potential lunar isolation combination.','Kemadruma cancellation rules are extensive; do not treat this screening detection as a final yoga judgment.');
+ // Additional conjunction, sign exchange, and directional graha drishti evidence.
+ // Jaimini and Nadi connections are displayed as context only, never as automatic Parashari yogas.
+ const graha=(a,b)=>relationships.parashari.find(x=>x.source===a&&x.targets.includes(b));
+ const pairRules=(a,b)=>{
+   if(a===b)return ['Same planetary lord'];
+   const matches=[];
+   if(same(a,b))matches.push('same-sign conjunction in '+Z[sign(p[a])]);
+   if(exchange(a,b))matches.push('mutual sign exchange');
+   if(graha(a,b))matches.push(a+' aspects '+b+' (Parashari '+graha(a,b).step+'th aspect)');
+   if(graha(b,a))matches.push(b+' aspects '+a+' (Parashari '+graha(b,a).step+'th aspect)');
+   return matches;
+ };
+ const seen=new Set(result.filter(y=>y.category==='Raja').map(y=>y.title));
+ for(const a of [1,5,9])for(const b of [1,4,7,10]){
+   if(a===b)continue;
+   const x=l(a),y=l(b);if(x===y)continue;
+   const rules=pairRules(x,y),name='Kendra–Trikona lord relationship ('+a+' / '+b+')';
+   if(!rules.length||seen.has(name))continue;
+   seen.add(name);
+   add('Raja',name,'House '+a+' lord '+x+' ('+fmt(p[x])+') and house '+b+' lord '+y+' ('+fmt(p[y])+'): '+rules.join('; ')+'.','A candidate auspicious lordship connection involving trinal and angular houses.','Aspects are directional, not automatically mutual. Strength, benefic/malefic functional roles and yoga exceptions are unverified.');
+ }
+ const wealthPairs=[[2,5],[2,9],[2,11],[5,11],[9,11]];
+ for(const [a,b] of wealthPairs){
+   const x=l(a),y=l(b);if(x===y)continue;
+   const evidence=pairRules(x,y);
+   if(evidence.length)add('Dhana','Wealth lord relationship ('+a+' / '+b+')','House '+a+' lord '+x+' and house '+b+' lord '+y+': '+evidence.join('; ')+'.','Potential relationship between wealth and trinal or gain-related houses.','This screens for relations; no assessment of realization, lordship complications or financial outcomes.');
+ }
+ const marakaContacts=['Saturn','Mars','Rahu','Ketu'];
+ for(const y of result){
+   const proofText=y.proof;
+   const mentioned=P.filter(n=>new RegExp('\\b'+n+'\\b').test(proofText));
+   const notes=[];
+   for(const n of mentioned){
+     const dignity=planetCondition(n,p);
+     if(dignity==='Debilitation sign')notes.push(n+' in debilitation sign');
+     else if(dignity==='Exaltation sign')notes.push(n+' exalted');
+     else if(dignity==='Own sign')notes.push(n+' in own sign');
+     const contacts=marakaContacts.filter(m=>m!==n&&(same(m,n)||graha(m,n))).filter(m=>!mentioned.includes(m));
+     if(contacts.length)notes.push(n+' contacted by '+contacts.join(', ')+' (screening only)');
+   }
+   const jaf=relationships.jaimini.filter(x=>x.fromPlanets.some(n=>mentioned.includes(n))&&x.toPlanets.some(n=>mentioned.includes(n)));
+   const nad=nadiRelationships(p).filter(x=>mentioned.includes(x.a)&&mentioned.includes(x.b));
+   y.qualifiers=notes;
+   y.otherSystems=[
+      ...(jaf.length?['Jaimini sign relationship also exists ('+jaf.length+' directed link(s)); not a Parashari yoga condition.']:[]),
+      ...(nad.length?['Nadi-inspired sign connection also exists ('+nad.map(x=>NADI_TYPES[x.type]).join(', ')+'); contextual only.']:[])
+   ];
+ }
  return result;
 }
 function renderWheel(p){const names=Array.from({length:12},(_,i)=>Z[i]);const ascSign=sign(p.Asc);const ring=[];const cx=210,cy=210;
@@ -322,6 +370,6 @@ renderAspects(data);
 renderNadi(data);
 renderJaimini(data);
 if($('relationship-audit')){$('relationship-audit').innerHTML='<p><b>Shared relationship calculations:</b> '+relationships.conjunctions.length+' same-sign pairs · '+relationships.parashari.length+' directional Parashari sign aspects · '+relationships.jaimini.length+' directional Jaimini sign aspects.</p><p>Whole-sign houses from sidereal ascendant. Computed aspects indicate sign relationships; they do not by themselves establish strength, orb or a yoga. Nadi-inspired sign-connection analysis is provided separately and is not interchangeable with graha drishti.</p>';}
-const results=yogas(p);$('yogas').classList.remove('placeholder');$('yogas').innerHTML=results.length?'<p class="subtle">'+results.length+' possible combinations found. These are initial detections, not final strength judgments.</p>'+results.map(y=>'<article class="yoga"><span class="yoga-category">'+esc(y.category)+'</span><h3>'+esc(y.title)+'</h3><p>'+esc(y.reading)+'</p><small><b>Calculation evidence:</b> '+esc(y.proof)+'</small><small class="yoga-caveat"><b>Qualification:</b> '+esc(y.caveat)+'</small></article>').join(''):'<p class="subtle">None of the currently implemented yoga conditions were detected. This does not mean the natal chart has no yogas.</p>'}
+const results=yogas(p,relationships);$('yogas').classList.remove('placeholder');$('yogas').innerHTML=results.length?'<p class="subtle">'+results.length+' possible combinations found. These are initial detections, not final strength judgments.</p>'+results.map(y=>'<article class="yoga"><span class="yoga-category">'+esc(y.category)+'</span><h3>'+esc(y.title)+'</h3><p>'+esc(y.reading)+'</p><small><b>Calculation evidence:</b> '+esc(y.proof)+'</small><small class="yoga-caveat"><b>Qualification:</b> '+esc(y.caveat)+'</small>'+(y.qualifiers?.length?'<small><b>Condition indicators:</b> '+esc(y.qualifiers.join('; '))+'</small>':'')+(y.otherSystems?.length?'<small><b>Other systems (not yoga proof):</b> '+esc(y.otherSystems.join(' '))+'</small>':'')+'</article>').join(''):'<p class="subtle">None of the currently implemented yoga conditions were detected. This does not mean the natal chart has no yogas.</p>'}
 $('birth').addEventListener('submit',e=>{e.preventDefault();$('status').classList.remove('error');try{if(!swe)throw Error('Ephemeris has not initialized');if(selectedLocation?.timezone&&!manuallyEditedOffset){try{refreshOffset()}catch(err){locationStatus.textContent='Automatic UTC lookup failed. Enter the UTC offset manually.'}}const v=Object.fromEntries(new FormData(e.currentTarget).entries());if(v.lat===''||v.lon===''||v.offset===''||!Number.isFinite(Number(v.lat))||!Number.isFinite(Number(v.lon))||!Number.isFinite(Number(v.offset)))throw Error('Please select a city or enter latitude, longitude and UTC offset manually.');const data=chart(v);render(data);$('status').textContent='Calculated successfully · '+data.dt.toISOString()+' · all dates in displayed dashas are UTC calendar dates.'}catch(err){console.error(err);$('status').classList.add('error');$('status').textContent='Calculation error: '+err.message}});
 init();
