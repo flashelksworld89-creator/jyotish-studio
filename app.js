@@ -360,6 +360,33 @@ function renderJaimini(data){
  el.innerHTML='<p class="subtle">'+relevant.length+' directional sign aspects from occupied signs match this filter. Empty receiving signs are shown because Jaimini aspects operate between signs, not only planets.</p>'+(relevant.length?relevant.join(''):'<p class="subtle">No matching occupied source sign aspects.</p>');
 }
 $('jaimini-sign').addEventListener('change',()=>{if(mostRecentChart)renderJaimini(mostRecentChart)});
+
+const COMBUST_ORBS={Moon:12,Mars:17,Mercury:14,Jupiter:11,Venus:10,Saturn:15};
+function angularSeparation(a,b){const d=Math.abs(mod(a)-mod(b));return Math.min(d,360-d)}
+function yogaConditionReview(y,p,r){
+ const participants=P.filter(n=>new RegExp('\\b'+n+'\\b').test(y.proof));
+ const positive=[],cautions=[],unassessed=[];
+ const dignity=[];
+ for(const n of participants){
+   if(n==='Rahu'||n==='Ketu')continue;
+   const condition=planetCondition(n,p);
+   dignity.push(n+': '+condition);
+   if(condition==='Exaltation sign'||condition==='Own sign')positive.push(n+' is '+condition.toLowerCase());
+   if(condition==='Debilitation sign')cautions.push(n+' occupies its debilitation sign');
+   if(n!=='Sun'&&COMBUST_ORBS[n]!==undefined){
+     const d=angularSeparation(p[n],p.Sun);
+     if(d<=COMBUST_ORBS[n])cautions.push(n+' is '+d.toFixed(2)+'° from Sun (within a broad combustion screening threshold)');
+   }
+   const incoming=r.parashari.filter(a=>a.targets.includes(n)).map(a=>a.source);
+   if(incoming.length)unassessed.push(n+' receives whole-sign graha drishti from '+[...new Set(incoming)].join(', '));
+ }
+ if(y.title.includes('Kemadruma'))unassessed.push('Classical Kemadruma cancellation rules require additional independent testing');
+ if(y.category==='Vipareeta')unassessed.push('Vipareeta-specific exclusions and additional associations are not fully evaluated');
+ if(y.title.includes('Mahapurusha'))unassessed.push('Mahapurusha cancellation and full planetary strength conditions remain unassessed');
+ return {participants,positive,cautions,dignity,unassessed,
+  status:cautions.length?'Qualifying combination with caution flags':'Qualifying combination; strength undetermined',
+  cancellation:'Not established — no complete cancellation rule set has been applied'};
+}
 function render(data){const {positions:p,relationships,dt,ayanamsa,form}=data;const now=Date.now();mostRecentChart=data;
 $('generated').textContent=esc(form.name)+' · '+date(dt.getTime())+' UTC '+dt.toISOString().slice(11,16);
 const a=[['Ascendant',Z[sign(p.Asc)],degreeWithinSign(p.Asc)],['Moon sign',Z[sign(p.Moon)],degreeWithinSign(p.Moon)],['Birth nakshatra',nk(p.Moon),'Pada '+(Math.floor((p.Moon%(360/27))/(360/108))+1)],['Current daśā','—','Choose a system']];
@@ -370,6 +397,6 @@ renderAspects(data);
 renderNadi(data);
 renderJaimini(data);
 if($('relationship-audit')){$('relationship-audit').innerHTML='<p><b>Shared relationship calculations:</b> '+relationships.conjunctions.length+' same-sign pairs · '+relationships.parashari.length+' directional Parashari sign aspects · '+relationships.jaimini.length+' directional Jaimini sign aspects.</p><p>Whole-sign houses from sidereal ascendant. Computed aspects indicate sign relationships; they do not by themselves establish strength, orb or a yoga. Nadi-inspired sign-connection analysis is provided separately and is not interchangeable with graha drishti.</p>';}
-const results=yogas(p,relationships);$('yogas').classList.remove('placeholder');$('yogas').innerHTML=results.length?'<p class="subtle">'+results.length+' possible combinations found. These are initial detections, not final strength judgments.</p>'+results.map(y=>'<article class="yoga"><span class="yoga-category">'+esc(y.category)+'</span><h3>'+esc(y.title)+'</h3><p>'+esc(y.reading)+'</p><small><b>Calculation evidence:</b> '+esc(y.proof)+'</small><small class="yoga-caveat"><b>Qualification:</b> '+esc(y.caveat)+'</small>'+(y.qualifiers?.length?'<small><b>Condition indicators:</b> '+esc(y.qualifiers.join('; '))+'</small>':'')+(y.otherSystems?.length?'<small><b>Other systems (not yoga proof):</b> '+esc(y.otherSystems.join(' '))+'</small>':'')+'</article>').join(''):'<p class="subtle">None of the currently implemented yoga conditions were detected. This does not mean the natal chart has no yogas.</p>'}
+const results=yogas(p,relationships);for(const y of results)y.review=yogaConditionReview(y,p,relationships);$('yogas').classList.remove('placeholder');$('yogas').innerHTML=results.length?'<p class="subtle">'+results.length+' possible combinations found. These are initial detections, not final strength judgments.</p>'+results.map(y=>'<article class="yoga"><span class="yoga-category">'+esc(y.category)+'</span><h3>'+esc(y.title)+'</h3><p>'+esc(y.reading)+'</p><small><b>Calculation evidence:</b> '+esc(y.proof)+'</small><small class="yoga-caveat"><b>Qualification:</b> '+esc(y.caveat)+'</small><small class="yoga-review"><b>Assessment:</b> '+esc(y.review.status)+'<br><b>Dignity:</b> '+esc(y.review.dignity.join('; ')||'Not applicable')+'<br><b>Support:</b> '+esc(y.review.positive.join('; ')||'None identified by implemented rules')+'<br><b>Cautions:</b> '+esc(y.review.cautions.join('; ')||'None identified by implemented rules')+'<br><b>Received aspects:</b> '+esc(y.review.unassessed.join('; ')||'No additional indicators')+'<br><b>Cancellation:</b> '+esc(y.review.cancellation)+'</small>'+(y.qualifiers?.length?'<small><b>Condition indicators:</b> '+esc(y.qualifiers.join('; '))+'</small>':'')+(y.otherSystems?.length?'<small><b>Other systems (not yoga proof):</b> '+esc(y.otherSystems.join(' '))+'</small>':'')+'</article>').join(''):'<p class="subtle">None of the currently implemented yoga conditions were detected. This does not mean the natal chart has no yogas.</p>'}
 $('birth').addEventListener('submit',e=>{e.preventDefault();$('status').classList.remove('error');try{if(!swe)throw Error('Ephemeris has not initialized');if(selectedLocation?.timezone&&!manuallyEditedOffset){try{refreshOffset()}catch(err){locationStatus.textContent='Automatic UTC lookup failed. Enter the UTC offset manually.'}}const v=Object.fromEntries(new FormData(e.currentTarget).entries());if(v.lat===''||v.lon===''||v.offset===''||!Number.isFinite(Number(v.lat))||!Number.isFinite(Number(v.lon))||!Number.isFinite(Number(v.offset)))throw Error('Please select a city or enter latitude, longitude and UTC offset manually.');const data=chart(v);render(data);$('status').textContent='Calculated successfully · '+data.dt.toISOString()+' · all dates in displayed dashas are UTC calendar dates.'}catch(err){console.error(err);$('status').classList.add('error');$('status').textContent='Calculation error: '+err.message}});
 init();
