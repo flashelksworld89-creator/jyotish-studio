@@ -194,7 +194,7 @@ function yogas(p,relationships){
  const second=l(2),eleventh=l(11);
  if(second!==eleventh&&(same(second,eleventh)||exchange(second,eleventh)))add('Dhana','2nd–11th Lord Dhana Yoga','2nd lord '+second+' and 11th lord '+eleventh+' '+(same(second,eleventh)?'share '+Z[sign(p[second])]:'exchange signs')+'.','A classical wealth-house connection; outcome depends on placement and dignity.');
  const sixth=l(6),eighth=l(8),twelfth=l(12);
- for(const [n,lord] of [[6,sixth],[8,eighth],[12,twelfth]])if([6,8,12].includes(hs(lord)))add('Vipareeta','Dusthana Lord in Dusthana ('+n+'th lord)','House '+n+' lord '+lord+' is in house '+hs(lord)+' ('+fmt(p[lord])+').','Potential Vipareeta Raja Yoga indicator in some classical interpretations.','Not sufficient to establish Harsha, Sarala or Vimala Yoga: additional occupancy, associations and lordship conditions must be checked.');
+ // Detailed Neecha Bhanga and Vipareeta screening runs below with explicit qualifying rules.
  const neighbors=(center,dist)=>P.filter(n=>!['Sun','Rahu','Ketu','Moon'].includes(n)&&house(p[n],p[center])===dist);
  const sunapha=neighbors('Moon',2),anapha=neighbors('Moon',12);
  if(sunapha.length)add('Lunar','Sunapha Yoga',sunapha.join(', ')+' in second sign from Moon.','Traditionally connected with self-earned resources and initiative.');
@@ -202,6 +202,38 @@ function yogas(p,relationships){
  if(sunapha.length&&anapha.length)add('Lunar','Durudhara Yoga','Planets on both sides of Moon: '+sunapha.join(', ')+' / '+anapha.join(', ')+'.','A traditional lunar support combination.');
  const occupied=n=>P.filter(q=>q!==n&&sign(p[q])===sign(p[n]));
  if(occupied('Moon').filter(n=>!['Rahu','Ketu'].includes(n)).length===0&&!sunapha.length&&!anapha.length&&!inK('Moon'))add('Lunar','Kemadruma screening indication','Moon has no sign conjunction and no qualifying planets in adjacent signs; Moon is not in a natal kendra.','Potential lunar isolation combination.','Kemadruma cancellation rules are extensive; do not treat this screening detection as a final yoga judgment.');
+ // Two source-specific yoga screens; neither guarantees Raja Yoga fruition.
+ const kendraFrom=(a,b)=>[1,4,7,10].includes(house(p[a],p[b]));
+ const exaltLordForSign=z=>Object.keys(DIGNITY_SIGNS).find(n=>DIGNITY_SIGNS[n].exalt===z);
+ for(const planet of ['Sun','Moon','Mars','Mercury','Jupiter','Venus','Saturn']){
+   const z=sign(p[planet]),data=DIGNITY_SIGNS[planet];
+   if(z!==data.debil)continue;
+   const dispositor=RULERS[z],exaltLord=exaltLordForSign(z),checks=[];
+   if(kendraFrom(dispositor,'Asc'))checks.push('Dispositor '+dispositor+' is in a kendra from Lagna (house '+hs(dispositor)+')');
+   if(kendraFrom(dispositor,'Moon'))checks.push('Dispositor '+dispositor+' is in a kendra from Moon');
+   if(exaltLord&&kendraFrom(exaltLord,'Asc'))checks.push('Planet exalted in '+Z[z]+' ('+exaltLord+') is angular from Lagna');
+   if(exaltLord&&kendraFrom(exaltLord,'Moon'))checks.push('Planet exalted in '+Z[z]+' ('+exaltLord+') is angular from Moon');
+   if(checks.length)add('Neecha Bhanga','Neecha Bhanga candidate — '+planet,
+     planet+' '+fmt(p[planet])+' is debilitated. '+checks.join('; ')+'.',
+     'Cancellation of debilitation is indicated by angular support under the selected Parashari screening rules.',
+     'Cancellation of debilitation is not automatically Neecha Bhanga Raja Yoga. Other formulations, divisional strength and actual Raja Yoga conditions need separate judgment.');
+ }
+ const auspicious=new Set([1,5,9,10]);
+ for(const [source,named] of [[6,'Harsha'],[8,'Sarala'],[12,'Vimala']]){
+   const lord=l(source),target=hs(lord);if(![6,8,12].includes(target))continue;
+   const others=Array.from({length:12},(_,i)=>i+1).filter(h=>l(h)===lord&&h!==source);
+   const sameSign=P.filter(n=>n!==lord&&sign(p[n])===sign(p[lord])&&['Sun','Moon','Mars','Mercury','Jupiter','Venus','Saturn'].includes(n));
+   const joinedBenefics=sameSign.filter(n=>['Jupiter','Venus','Mercury','Moon'].includes(n));
+   const otherLordships=others.filter(n=>auspicious.has(n));
+   const strict=target!==source&&!joinedBenefics.length&&!otherLordships.length;
+   add('Vipareeta',named+' Yoga '+(strict?'candidate':'placement indicator'),
+     source+'th lord '+lord+' is in house '+target+' ('+fmt(p[lord])+'). Other rulerships: '+(others.join(', ')||'none')+'. Same-sign classical planet associations: '+(sameSign.join(', ')||'none')+'.',
+     strict?'Meets the implemented stricter dusthana placement and association screening; further chart-level confirmation remains necessary.':'Meets the broad dusthana placement rule, but is not confirmed under stricter variants.',
+     (target===source?'Own-dusthana occupancy is not accepted by some stricter traditions. ':'')+
+     (joinedBenefics.length?'Possible benefic conjunction: '+joinedBenefics.join(', ')+'. ':'')+
+     (otherLordships.length?'Additional auspicious house lordship: '+otherLordships.join(', ')+'. ':'')+
+     'Received aspects, strength, and lineage-specific exclusions still require assessment.');
+ }
  // Additional conjunction, sign exchange, and directional graha drishti evidence.
  // Jaimini and Nadi connections are displayed as context only, never as automatic Parashari yogas.
  const graha=(a,b)=>relationships.parashari.find(x=>x.source===a&&x.targets.includes(b));
