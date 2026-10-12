@@ -400,7 +400,7 @@ function navamsaSign(longitude){
  return (first+part)%12;
 }
 function verifyNavamsa(){
- const checks=[[0,0],[3.34,1],[30,9],[60,6],[120,0],[150,1],[359.9,11]];
+ const checks=[[0,0],[3.34,1],[30,9],[60,6],[120,0],[150,9],[359.9,11]];
  for(const [longitude,expected] of checks)if(navamsaSign(longitude)!==expected)throw Error('Navamsa calculation verification failed at '+longitude);
 }
 function navamsaDignity(n,longitude){
