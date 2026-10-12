@@ -8,7 +8,7 @@ const degreeWithinSign=x=>{const n=Math.floor((mod(x)%30)*3600+1e-8);return Stri
 const H=365.2425*86400000;
 let swe;
 const esc=x=>String(x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-async function init(){try{swe=new SwissEphemeris(); await swe.init(); swe.setSiderealMode(SiderealMode.Lahiri); $('status').textContent='Calculation engine ready. Enter birth details and generate.'; $('calculate').disabled=false}catch(e){$('status').textContent='Ephemeris failed to load: '+e.message;$('status').classList.add('error');$('calculate').disabled=true}}
+async function init(){try{validateRelationshipModel();swe=new SwissEphemeris(); await swe.init(); swe.setSiderealMode(SiderealMode.Lahiri); $('status').textContent='Calculation engine ready. Enter birth details and generate.'; $('calculate').disabled=false}catch(e){$('status').textContent='Ephemeris failed to load: '+e.message;$('status').classList.add('error');$('calculate').disabled=true}}
 $('calculate').disabled=true;
 let selectedLocation=null;
 const placeInput=document.querySelector('[name="place"]'), latInput=document.querySelector('[name="lat"]'), lonInput=document.querySelector('[name="lon"]'), offsetInput=document.querySelector('[name="offset"]');
@@ -79,12 +79,54 @@ placeInput.addEventListener('change',()=>{if(!selectedLocation&&placeInput.value
 placeInput.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();lookupPlace()}});
 
 function times(form){const [y,m,d]=form.date.split('-').map(Number),[hr,min]=form.time.split(':').map(Number); const offset=Number(form.offset);const ms=Date.UTC(y,m-1,d,hr,min)-offset*3600000;return new Date(ms)}
+// Shared whole-sign chart relationships. These do not depend on interpretive schools.
+const ASPECT_STEPS={Sun:[7],Moon:[7],Mars:[4,7,8],Mercury:[7],Jupiter:[5,7,9],Venus:[7],Saturn:[3,7,10]};
+function relationshipModel(positions){
+  const ascSign=sign(positions.Asc), planets={};
+  for(const name of P){
+    const longitude=mod(positions[name]),zodiac=sign(longitude);
+    planets[name]={name,longitude,sign:zodiac,house:((zodiac-ascSign+12)%12)+1,
+      nakshatra:nk(longitude),retrograde:false,
+      ruledHouses:Array.from({length:12},(_,i)=>i+1).filter(i=>RULERS[(ascSign+i-1)%12]===name)};
+  }
+  const conjunctions=[],parashari=[],jaimini=[];
+  for(let i=0;i<P.length;i++)for(let j=i+1;j<P.length;j++)
+    if(planets[P[i]].sign===planets[P[j]].sign)
+      conjunctions.push({a:P[i],b:P[j],sign:planets[P[i]].sign});
+  for(const source of Object.keys(ASPECT_STEPS))for(const step of ASPECT_STEPS[source]){
+    const destinationSign=(planets[source].sign+step-1)%12;
+    parashari.push({source,step,targetSign:destinationSign,targetHouse:((destinationSign-ascSign+12)%12)+1,
+      targets:P.filter(name=>name!==source&&planets[name].sign===destinationSign)});
+  }
+  const mode=z=>z%3===0?'movable':z%3===1?'fixed':'dual';
+  for(let a=0;a<12;a++)for(let b=0;b<12;b++){
+    const distance=(b-a+12)%12,am=mode(a),bm=mode(b);
+    const matched=(am==='movable'&&bm==='fixed'&&distance!==1&&distance!==11)||
+      (am==='fixed'&&bm==='movable'&&distance!==1&&distance!==11)||
+      (am==='dual'&&bm==='dual'&&a!==b);
+    if(matched)jaimini.push({fromSign:a,toSign:b,fromPlanets:P.filter(n=>planets[n].sign===a),toPlanets:P.filter(n=>planets[n].sign===b)});
+  }
+  return {ascSign,planets,conjunctions,parashari,jaimini};
+}
+function validateRelationshipModel(){
+  const p={Asc:0,Sun:0,Moon:90,Mars:0,Mercury:45,Jupiter:120,Venus:210,Saturn:300,Rahu:60,Ketu:240};
+  const r=relationshipModel(p);
+  const marsFourth=r.parashari.find(a=>a.source==='Mars'&&a.step===4);
+  const jupiterFifth=r.parashari.find(a=>a.source==='Jupiter'&&a.step===5);
+  if(marsFourth.targetSign!==3||jupiterFifth.targetSign!==8||r.planets.Moon.house!==4)
+    throw Error('Relationship model failed its whole-sign verification');
+  if(!r.conjunctions.some(a=>a.a==='Sun'&&a.b==='Mars'))
+    throw Error('Relationship conjunction verification failed');
+  if(r.jaimini.some(a=>a.fromSign===0&&a.toSign===1)||!r.jaimini.some(a=>a.fromSign===0&&a.toSign===4))
+    throw Error('Jaimini sign rule verification failed');
+}
 function chart(form){const dt=times(form);if(!Number.isFinite(dt.getTime()))throw Error('Invalid date or time');const jd=swe.dateToJulianDay(dt); const ay=swe.getAyanamsaExUt(jd,CalculationFlag.MoshierEphemeris);if(!Number.isFinite(ay))throw Error('Ayanamsa calculation returned invalid data');const flags=CalculationFlag.MoshierEphemeris|CalculationFlag.Speed|CalculationFlag.Sidereal;
 const bodies={Sun:Planet.Sun,Moon:Planet.Moon,Mars:Planet.Mars,Mercury:Planet.Mercury,Jupiter:Planet.Jupiter,Venus:Planet.Venus,Saturn:Planet.Saturn,Rahu:LunarPoint.MeanNode};
 const positions={};for(const [name,b] of Object.entries(bodies)){const pos=swe.calculatePosition(jd,b,flags); if(!Number.isFinite(pos.longitude))throw Error(name+' coordinates unavailable'); positions[name]=mod(pos.longitude)}
 positions.Ketu=mod(positions.Rahu+180);
 const asc=swe.calculateHouses(jd,Number(form.lat),Number(form.lon),HouseSystem.Placidus).ascendant;if(!Number.isFinite(asc))throw Error('Ascendant calculation failed');positions.Asc=mod(asc-ay);
-return {positions,ayanamsa:ay,dt,jd,form}}
+const relationships=relationshipModel(positions);
+return {positions,relationships,ayanamsa:ay,dt,jd,form}}
 const YOGINI_NAMES=['Mangala','Pingala','Dhanya','Bhramari','Bhadrika','Ulka','Siddha','Sankata'];
 const YOGINI_RULERS=['Moon','Sun','Jupiter','Mars','Mercury','Saturn','Venus','Rahu'];
 const YOGINI_YEARS=[1,2,3,4,5,6,7,8];
@@ -169,12 +211,13 @@ ring.push('<text x="'+tx+'" y="'+ty+'" text-anchor="middle" fill="'+(i===0?'#f1c
 const members=P.filter(n=>sign(p[n])===(ascSign+i));const rad=103;members.forEach((n,j)=>{const a=angle+((j-(members.length-1)/2)*0.11);const r=rad-(j%2)*17;ring.push('<text x="'+(cx+r*Math.cos(a)).toFixed(1)+'" y="'+(cy+r*Math.sin(a)).toFixed(1)+'" fill="#eac38d" font-size="16" text-anchor="middle">'+G[n]+'</text>')})}
 ring.push('<circle cx="210" cy="210" r="47" fill="#0c1420" stroke="#89724f"/>','<text x="210" y="203" text-anchor="middle" font-size="12" fill="#9cacbe">ASC</text>','<text x="210" y="223" text-anchor="middle" font-size="15" fill="#eccc93">'+Z[ascSign]+'</text>');
 $('wheel').innerHTML='<svg viewBox="0 0 420 420" role="img" aria-label="Whole-sign circular chart beginning with the ascendant sign">'+ring.join('')+'</svg>'}
-function render(data){const {positions:p,dt,ayanamsa,form}=data;const now=Date.now();mostRecentChart=data;
+function render(data){const {positions:p,relationships,dt,ayanamsa,form}=data;const now=Date.now();mostRecentChart=data;
 $('generated').textContent=esc(form.name)+' · '+date(dt.getTime())+' UTC '+dt.toISOString().slice(11,16);
 const a=[['Ascendant',Z[sign(p.Asc)],degreeWithinSign(p.Asc)],['Moon sign',Z[sign(p.Moon)],degreeWithinSign(p.Moon)],['Birth nakshatra',nk(p.Moon),'Pada '+(Math.floor((p.Moon%(360/27))/(360/108))+1)],['Current daśā','—','Choose a system']];
 $('highlights').innerHTML=a.map(([label,value,detail])=>'<div class="highlight"><label>'+esc(label)+'</label><strong>'+esc(value)+'</strong><small>'+esc(detail)+'</small></div>').join('');
 renderWheel(p);$('positions').innerHTML='<table class="positions-table"><thead><tr><th>Body</th><th>Position</th><th>House</th></tr></thead><tbody>'+['Asc',...P].map(n=>'<tr><td>'+G[n]+' '+n+'</td><td>'+fmt(p[n])+'</td><td>'+(n==='Asc'?'—':house(p[n],p.Asc))+'</td></tr>').join('')+'</tbody></table><p class="subtle">Lahiri ayanamsa: '+ayanamsa.toFixed(5)+'°. Mean Rahu (Ketu exactly opposite). Planet coordinates: Moshier fallback. Ascendant: tropical house calculation minus Lahiri offset.</p>';
 renderDasha(data);
+if($('relationship-audit')){$('relationship-audit').innerHTML='<p><b>Shared relationship calculations:</b> '+relationships.conjunctions.length+' same-sign pairs · '+relationships.parashari.length+' directional Parashari sign aspects · '+relationships.jaimini.length+' directional Jaimini sign aspects.</p><p>Whole-sign houses from sidereal ascendant. Computed aspects indicate sign relationships; they do not by themselves establish strength, orb or a yoga. Nadi interpretation rules are not enabled yet.</p>';}
 const results=yogas(p);$('yogas').classList.remove('placeholder');$('yogas').innerHTML=results.length?'<p class="subtle">'+results.length+' possible combinations found. These are initial detections, not final strength judgments.</p>'+results.map(y=>'<article class="yoga"><span class="yoga-category">'+esc(y.category)+'</span><h3>'+esc(y.title)+'</h3><p>'+esc(y.reading)+'</p><small><b>Calculation evidence:</b> '+esc(y.proof)+'</small><small class="yoga-caveat"><b>Qualification:</b> '+esc(y.caveat)+'</small></article>').join(''):'<p class="subtle">None of the currently implemented yoga conditions were detected. This does not mean the natal chart has no yogas.</p>'}
 $('birth').addEventListener('submit',e=>{e.preventDefault();$('status').classList.remove('error');try{if(!swe)throw Error('Ephemeris has not initialized');if(selectedLocation?.timezone&&!manuallyEditedOffset){try{refreshOffset()}catch(err){locationStatus.textContent='Automatic UTC lookup failed. Enter the UTC offset manually.'}}const v=Object.fromEntries(new FormData(e.currentTarget).entries());if(v.lat===''||v.lon===''||v.offset===''||!Number.isFinite(Number(v.lat))||!Number.isFinite(Number(v.lon))||!Number.isFinite(Number(v.offset)))throw Error('Please select a city or enter latitude, longitude and UTC offset manually.');const data=chart(v);render(data);$('status').textContent='Calculated successfully · '+data.dt.toISOString()+' · all dates in displayed dashas are UTC calendar dates.'}catch(err){console.error(err);$('status').classList.add('error');$('status').textContent='Calculation error: '+err.message}});
 init();
