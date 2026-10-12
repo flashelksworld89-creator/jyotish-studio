@@ -4,7 +4,7 @@ const N=['Ashwini','Bharani','Krittika','Rohini','Mrigashira','Ardra','Punarvasu
 const LORDS=['Ketu','Venus','Sun','Moon','Mars','Rahu','Jupiter','Saturn','Mercury'],YEARS=[7,20,6,10,7,18,16,19,17], RULERS=['Mars','Venus','Mercury','Moon','Sun','Mercury','Venus','Mars','Jupiter','Saturn','Saturn','Jupiter'];
 const P=['Sun','Moon','Mars','Mercury','Jupiter','Venus','Saturn','Rahu','Ketu'], G={Sun:'☉',Moon:'☽',Mars:'♂',Mercury:'☿',Jupiter:'♃',Venus:'♀',Saturn:'♄',Rahu:'☊',Ketu:'☋',Asc:'Asc'};
 const $=x=>document.getElementById(x),mod=x=>(x%360+360)%360,sign=x=>Math.floor(mod(x)/30), house=(a,b)=>((sign(a)-sign(b)+12)%12)+1,fmt=x=>Z[sign(x)]+' '+degreeWithinSign(x),nk=x=>N[Math.floor(mod(x)/(360/27))],date=x=>new Date(x).toLocaleDateString('en-US',{year:'numeric',month:'short',day:'numeric',timeZone:'UTC'});
-const degreeWithinSign=x=>{const n=Math.round((mod(x)%30)*3600);return String(Math.floor(n/3600)).padStart(2,'0')+'° '+String(Math.floor((n%3600)/60)).padStart(2,'0')+'′ '+String(n%60).padStart(2,'0')+'″'};
+const degreeWithinSign=x=>{const n=Math.floor((mod(x)%30)*3600+1e-8);return String(Math.floor(n/3600)).padStart(2,'0')+'° '+String(Math.floor((n%3600)/60)).padStart(2,'0')+'′ '+String(n%60).padStart(2,'0')+'″'};
 const H=365.2425*86400000;
 let swe;
 const esc=x=>String(x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
