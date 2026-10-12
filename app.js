@@ -131,16 +131,37 @@ function renderDasha(data){
 $('dasha-system').addEventListener('change',()=>{if(mostRecentChart)renderDasha(mostRecentChart)});
 $('dasha-year').addEventListener('change',()=>{if(mostRecentChart)renderDasha(mostRecentChart)});
 $('dasha-reference').addEventListener('change',()=>{if(mostRecentChart)renderDasha(mostRecentChart)});
-function yogas(p){const result=[],asc=p.Asc,h=n=>house(p[n],asc),same=(a,b)=>sign(p[a])===sign(p[b]),k=n=>[1,4,7,10].includes(h(n)),angular=(a,b)=>[1,4,7,10].includes(house(p[a],p[b]));
-function add(title,proof,reading){result.push({title,proof,reading})}
-if(angular('Jupiter','Moon'))add('Gaja Kesari Yoga','Jupiter occupies a kendra (1st, 4th, 7th, or 10th) from the Moon.','Traditionally associated with counsel, support and knowledge. Full judgment requires dignity, afflictions and strength.');
-if(same('Sun','Mercury'))add('Budha Aditya Yoga','The Sun and Mercury occupy '+Z[sign(p.Sun)]+'.','Traditionally associated with learning, analysis and communication. Mercury combustion and strength have not been adjudicated.');
-if(same('Moon','Mars')||house(p.Mars,p.Moon)===7)add('Chandra Mangala Yoga','Mars is '+(same('Moon','Mars')?'conjunct':'opposite')+' the Moon by whole sign.','Traditionally linked with practical drive and resource activity; condition and house ownership modify results.');
-const own={Mars:[0,7],Mercury:[2,5],Jupiter:[8,11],Venus:[1,6],Saturn:[9,10]},exalt={Mars:9,Mercury:5,Jupiter:3,Venus:11,Saturn:6},named={Mars:'Ruchaka',Mercury:'Bhadra',Jupiter:'Hamsa',Venus:'Malavya',Saturn:'Shasha'};
-for(const n of Object.keys(own)){if(k(n)&&(own[n].includes(sign(p[n]))||exalt[n]===sign(p[n])))add(named[n]+' Mahapurusha Yoga',n+' in '+Z[sign(p[n])]+', a '+(own[n].includes(sign(p[n]))?'rulership':'exaltation')+' sign, in house '+h(n)+'.','A classical kendra-and-dignity combination. Effects depend on additional strength and mitigating factors.')}
-const nine=RULERS[(sign(asc)+8)%12],ten=RULERS[(sign(asc)+9)%12];
-if(nine!==ten&&same(nine,ten))add('Dharma–Karma Adhipati association','9th lord '+nine+' and 10th lord '+ten+' are conjunct by sign in '+Z[sign(p[nine])]+'.','A traditional relationship between dharma and career lords. Other associations such as exchanges and aspects are not yet evaluated.');
-return result}
+function yogas(p){
+ const result=[],asc=p.Asc,hs=n=>house(p[n],asc),same=(a,b)=>sign(p[a])===sign(p[b]);
+ const add=(category,title,proof,reading,caveat='Strength, aspects, combustion and cancellations have not been fully assessed.')=>result.push({category,title,proof,reading,caveat});
+ const l=n=>RULERS[(sign(asc)+n-1)%12],inK=n=>[1,4,7,10].includes(hs(n)),inT=n=>[1,5,9].includes(hs(n));
+ const relation=(a,b)=>same(a,b)||((sign(p[a])+6)%12===sign(p[b]));
+ const exchange=(a,b)=>a!==b&&RULERS[sign(p[a])]===b&&RULERS[sign(p[b])]===a;
+ if([1,4,7,10].includes(house(p.Jupiter,p.Moon)))add('Lunar','Gaja Kesari Yoga','Jupiter '+fmt(p.Jupiter)+' is in house '+house(p.Jupiter,p.Moon)+' from Moon '+fmt(p.Moon)+'.','Traditionally associated with wisdom, counsel and social support.');
+ if(same('Sun','Mercury'))add('Solar','Budha Aditya Yoga','Sun '+fmt(p.Sun)+' and Mercury '+fmt(p.Mercury)+' share '+Z[sign(p.Sun)]+'.','Traditionally connected to learning, analysis and communication.','Mercury combustion and conjunction closeness require separate analysis.');
+ if(same('Moon','Mars')||house(p.Mars,p.Moon)===7)add('Lunar','Chandra Mangala Yoga','Moon in house '+hs('Moon')+'; Mars in house '+hs('Mars')+'; conjunction/opposition by sign.','Traditionally associated with resourcefulness and material initiative.');
+ const own={Mars:[0,7],Mercury:[2,5],Jupiter:[8,11],Venus:[1,6],Saturn:[9,10]},exalt={Mars:9,Mercury:5,Jupiter:3,Venus:11,Saturn:6},names={Mars:'Ruchaka',Mercury:'Bhadra',Jupiter:'Hamsa',Venus:'Malavya',Saturn:'Shasha'};
+ for(const n of Object.keys(own))if(inK(n)&&(own[n].includes(sign(p[n]))||exalt[n]===sign(p[n])))add('Mahapurusha',names[n]+' Mahapurusha Yoga',n+' '+fmt(p[n])+' in natal house '+hs(n)+' ('+(own[n].includes(sign(p[n]))?'own':'exalted')+' sign).','Traditionally associated with the prominence of '+n+' qualities.');
+ const nine=l(9),ten=l(10);
+ if(nine!==ten&&(same(nine,ten)||exchange(nine,ten)))add('Raja','Dharma–Karma Adhipati Yoga','9th lord '+nine+' and 10th lord '+ten+' '+(same(nine,ten)?'conjoin in '+Z[sign(p[nine])]:'exchange their occupied signs')+'.','Traditionally connects fortune, purpose and professional responsibility.');
+ for(const a of [1,4,5,7,9,10])for(const b of [1,4,5,7,9,10]){
+   if(a>=b||![1,5,9].includes(a)||![1,4,7,10].includes(b))continue;
+   const x=l(a),y=l(b);
+   if(x!==y&&(same(x,y)||exchange(x,y)))add('Raja','Kendra–Trikona Raja Yoga ('+a+'th / '+b+'th)','House '+a+' lord '+x+' and house '+b+' lord '+y+' '+(same(x,y)?'occupy '+Z[sign(p[x])]+' together':'are in sign exchange')+'.','A potential connection of trinal and angular lordships.','This is a conjunction/exchange screening rule, not full Parashari aspect evaluation or a confirmed strong Raja Yoga.');
+ }
+ const second=l(2),eleventh=l(11);
+ if(second!==eleventh&&(same(second,eleventh)||exchange(second,eleventh)))add('Dhana','2nd–11th Lord Dhana Yoga','2nd lord '+second+' and 11th lord '+eleventh+' '+(same(second,eleventh)?'share '+Z[sign(p[second])]:'exchange signs')+'.','A classical wealth-house connection; outcome depends on placement and dignity.');
+ const sixth=l(6),eighth=l(8),twelfth=l(12);
+ for(const [n,lord] of [[6,sixth],[8,eighth],[12,twelfth]])if([6,8,12].includes(hs(lord)))add('Vipareeta','Dusthana Lord in Dusthana ('+n+'th lord)','House '+n+' lord '+lord+' is in house '+hs(lord)+' ('+fmt(p[lord])+').','Potential Vipareeta Raja Yoga indicator in some classical interpretations.','Not sufficient to establish Harsha, Sarala or Vimala Yoga: additional occupancy, associations and lordship conditions must be checked.');
+ const neighbors=(center,dist)=>P.filter(n=>!['Rahu','Ketu','Moon'].includes(n)&&house(p[n],center)===dist);
+ const sunapha=neighbors('Moon',2),anapha=neighbors('Moon',12);
+ if(sunapha.length)add('Lunar','Sunapha Yoga',sunapha.join(', ')+' in second sign from Moon.','Traditionally connected with self-earned resources and initiative.');
+ if(anapha.length)add('Lunar','Anapha Yoga',anapha.join(', ')+' in twelfth sign from Moon.','Traditionally connected with independence and sustained effort.');
+ if(sunapha.length&&anapha.length)add('Lunar','Durudhara Yoga','Planets on both sides of Moon: '+sunapha.join(', ')+' / '+anapha.join(', ')+'.','A traditional lunar support combination.');
+ const occupied=n=>P.filter(q=>q!==n&&sign(p[q])===sign(p[n]));
+ if(occupied('Moon').length===0&&!sunapha.length&&!anapha.length&&!inK('Moon'))add('Lunar','Kemadruma screening indication','Moon has no sign conjunction and no qualifying planets in adjacent signs; Moon is not in a natal kendra.','Potential lunar isolation combination.','Kemadruma cancellation rules are extensive; do not treat this screening detection as a final yoga judgment.');
+ return result;
+}
 function renderWheel(p){const names=Array.from({length:12},(_,i)=>Z[i]);const ascSign=sign(p.Asc);const ring=[];const cx=210,cy=210;
 for(let i=0;i<12;i++){const start=(i*30-90)*Math.PI/180,end=((i+1)*30-90)*Math.PI/180;const x1=cx+192*Math.cos(start),y1=cy+192*Math.sin(start),x2=cx+192*Math.cos(end),y2=cy+192*Math.sin(end);ring.push('<path d="M210 210 L'+x1.toFixed(2)+' '+y1.toFixed(2)+' A192 192 0 0 1 '+x2.toFixed(2)+' '+y2.toFixed(2)+' Z" fill="'+(i%2?'#192737':'#122131')+'" stroke="#586071" stroke-width=".7"/>');
 const angle=(i*30+15-90)*Math.PI/180,tx=cx+159*Math.cos(angle),ty=cy+159*Math.sin(angle);
