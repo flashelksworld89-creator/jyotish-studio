@@ -211,12 +211,44 @@ ring.push('<text x="'+tx+'" y="'+ty+'" text-anchor="middle" fill="'+(i===0?'#f1c
 const members=P.filter(n=>sign(p[n])===(ascSign+i));const rad=103;members.forEach((n,j)=>{const a=angle+((j-(members.length-1)/2)*0.11);const r=rad-(j%2)*17;ring.push('<text x="'+(cx+r*Math.cos(a)).toFixed(1)+'" y="'+(cy+r*Math.sin(a)).toFixed(1)+'" fill="#eac38d" font-size="16" text-anchor="middle">'+G[n]+'</text>')})}
 ring.push('<circle cx="210" cy="210" r="47" fill="#0c1420" stroke="#89724f"/>','<text x="210" y="203" text-anchor="middle" font-size="12" fill="#9cacbe">ASC</text>','<text x="210" y="223" text-anchor="middle" font-size="15" fill="#eccc93">'+Z[ascSign]+'</text>');
 $('wheel').innerHTML='<svg viewBox="0 0 420 420" role="img" aria-label="Whole-sign circular chart beginning with the ascendant sign">'+ring.join('')+'</svg>'}
+
+const HOUSE_TOPICS=['identity, initiative and physical vitality','income, family resources and speech','effort, skills and communication','home, property and emotional foundations','education, creativity and children','work duties, competition and health routines','partnership, agreements and public dealings','shared resources, uncertainty and major transitions','learning, teachers, beliefs and long-distance opportunities','career, authority and public contribution','networks, income gains and ambitions','expenses, solitude, foreign ties and release'];
+const PLANET_ACTIONS={Sun:'authority, visibility and decisions',Moon:'emotional responses, needs and public connection',Mars:'action, conflict management and technical initiative',Mercury:'analysis, negotiation and information exchange',Jupiter:'guidance, growth and judgment',Venus:'relationships, agreements, aesthetics and comfort',Saturn:'obligations, delays, limits and durable structures'};
+const DIGNITY_SIGNS={Sun:{own:[4],exalt:0,debil:6},Moon:{own:[3],exalt:1,debil:7},Mars:{own:[0,7],exalt:9,debil:3},Mercury:{own:[2,5],exalt:5,debil:11},Jupiter:{own:[8,11],exalt:3,debil:9},Venus:{own:[1,6],exalt:11,debil:5},Saturn:{own:[9,10],exalt:6,debil:0}};
+function planetCondition(n,p){
+ const z=sign(p[n]),d=DIGNITY_SIGNS[n];
+ if(!d)return 'Dignity not assessed';
+ if(d.exalt===z)return 'Exaltation sign';
+ if(d.debil===z)return 'Debilitation sign';
+ if(d.own.includes(z))return 'Own sign';
+ return 'Other sign (full dignity not calculated)';
+}
+function renderAspects(data){
+ const {positions:p,relationships:r}=data, parent=$('aspects');
+ if(!parent)return;
+ const selected=$('aspect-planet').value;
+ const selectedRows=r.parashari.filter(a=>selected==='all'||a.source===selected);
+ const incoming=Object.fromEntries(Object.keys(ASPECT_STEPS).map(n=>[n,r.parashari.filter(a=>a.targets.includes(n)).map(a=>a.source)]));
+ const cards=selectedRows.map(a=>{
+   const sender=r.planets[a.source],rulers=sender.ruledHouses,receivers=a.targets;
+   const ownership=rulers.length?rulers.map(h=>'house '+h+' ('+HOUSE_TOPICS[h-1]+')').join(' and '):'no classical natal house lordships';
+   const targetText=receivers.length?receivers.map(n=>n+' ('+fmt(p[n])+', natal house '+r.planets[n].house+')').join('; '):'No classical planet occupies this sign';
+   const group=receivers.length?'It also contacts '+receivers.map(n=>n+' and its topics of '+PLANET_ACTIONS[n]||n).join('; ')+'.':'With no planet in the receiving sign, the aspect acts on the house rather than a specific natal planet.';
+   const conjunctions=r.conjunctions.filter(x=>x.a===a.source||x.b===a.source).map(x=>x.a===a.source?x.b:x.a);
+   const cond=planetCondition(a.source,p);
+   const interpretation=a.source+' occupies the '+sender.house+'th natal house in '+Z[sender.sign]+' ('+fmt(p[a.source])+') and rules '+ownership+'. Its '+a.step+(a.step===3?'rd':a.step===4?'th':a.step===5?'th':a.step===7?'th':a.step===8?'th':a.step===9?'th':'th')+' Parashari aspect reaches house '+a.targetHouse+' ('+HOUSE_TOPICS[a.targetHouse-1]+'). In this traditional reading, '+PLANET_ACTIONS[a.source]+' associated with its placement and ruled houses may shape matters of the receiving house. '+group;
+   return '<article class="aspect-card"><div class="aspect-card-top"><strong>'+esc(a.source)+' → House '+a.targetHouse+'</strong><span>'+a.step+'th aspect · '+esc(Z[a.targetSign])+'</span></div><p class="aspect-positions"><b>Source:</b> '+esc(fmt(p[a.source]))+' · natal house '+sender.house+' · '+esc(cond)+'</p><p><b>Receiving planets:</b> '+esc(targetText)+'</p><p>'+esc(interpretation)+'</p><small><b>Further context:</b> '+esc(conjunctions.length?'Conjunct '+conjunctions.join(', ')+'. ':'No same-sign conjunction. ')+(incoming[a.source].length?'Aspected by '+incoming[a.source].join(', ')+'. ':'No other classical graha drishti detected on the source. ')+'Whole-sign directional aspects only; orb, shadbala, combustion and exact strength are not assessed.</small></article>';
+ });
+ parent.innerHTML='<p class="subtle">'+selectedRows.length+' directional aspects shown. Seven classical planets are aspect sources; Rahu/Ketu aspects vary by school and are not assumed here. A planet in the destination sign is listed separately from the aspected house.</p>'+cards.join('');
+}
+$('aspect-planet').addEventListener('change',()=>{if(mostRecentChart)renderAspects(mostRecentChart)});
 function render(data){const {positions:p,relationships,dt,ayanamsa,form}=data;const now=Date.now();mostRecentChart=data;
 $('generated').textContent=esc(form.name)+' · '+date(dt.getTime())+' UTC '+dt.toISOString().slice(11,16);
 const a=[['Ascendant',Z[sign(p.Asc)],degreeWithinSign(p.Asc)],['Moon sign',Z[sign(p.Moon)],degreeWithinSign(p.Moon)],['Birth nakshatra',nk(p.Moon),'Pada '+(Math.floor((p.Moon%(360/27))/(360/108))+1)],['Current daśā','—','Choose a system']];
 $('highlights').innerHTML=a.map(([label,value,detail])=>'<div class="highlight"><label>'+esc(label)+'</label><strong>'+esc(value)+'</strong><small>'+esc(detail)+'</small></div>').join('');
 renderWheel(p);$('positions').innerHTML='<table class="positions-table"><thead><tr><th>Body</th><th>Position</th><th>House</th></tr></thead><tbody>'+['Asc',...P].map(n=>'<tr><td>'+G[n]+' '+n+'</td><td>'+fmt(p[n])+'</td><td>'+(n==='Asc'?'—':house(p[n],p.Asc))+'</td></tr>').join('')+'</tbody></table><p class="subtle">Lahiri ayanamsa: '+ayanamsa.toFixed(5)+'°. Mean Rahu (Ketu exactly opposite). Planet coordinates: Moshier fallback. Ascendant: tropical house calculation minus Lahiri offset.</p>';
 renderDasha(data);
+renderAspects(data);
 if($('relationship-audit')){$('relationship-audit').innerHTML='<p><b>Shared relationship calculations:</b> '+relationships.conjunctions.length+' same-sign pairs · '+relationships.parashari.length+' directional Parashari sign aspects · '+relationships.jaimini.length+' directional Jaimini sign aspects.</p><p>Whole-sign houses from sidereal ascendant. Computed aspects indicate sign relationships; they do not by themselves establish strength, orb or a yoga. Nadi interpretation rules are not enabled yet.</p>';}
 const results=yogas(p);$('yogas').classList.remove('placeholder');$('yogas').innerHTML=results.length?'<p class="subtle">'+results.length+' possible combinations found. These are initial detections, not final strength judgments.</p>'+results.map(y=>'<article class="yoga"><span class="yoga-category">'+esc(y.category)+'</span><h3>'+esc(y.title)+'</h3><p>'+esc(y.reading)+'</p><small><b>Calculation evidence:</b> '+esc(y.proof)+'</small><small class="yoga-caveat"><b>Qualification:</b> '+esc(y.caveat)+'</small></article>').join(''):'<p class="subtle">None of the currently implemented yoga conditions were detected. This does not mean the natal chart has no yogas.</p>'}
 $('birth').addEventListener('submit',e=>{e.preventDefault();$('status').classList.remove('error');try{if(!swe)throw Error('Ephemeris has not initialized');if(selectedLocation?.timezone&&!manuallyEditedOffset){try{refreshOffset()}catch(err){locationStatus.textContent='Automatic UTC lookup failed. Enter the UTC offset manually.'}}const v=Object.fromEntries(new FormData(e.currentTarget).entries());if(v.lat===''||v.lon===''||v.offset===''||!Number.isFinite(Number(v.lat))||!Number.isFinite(Number(v.lon))||!Number.isFinite(Number(v.offset)))throw Error('Please select a city or enter latitude, longitude and UTC offset manually.');const data=chart(v);render(data);$('status').textContent='Calculated successfully · '+data.dt.toISOString()+' · all dates in displayed dashas are UTC calendar dates.'}catch(err){console.error(err);$('status').classList.add('error');$('status').textContent='Calculation error: '+err.message}});
