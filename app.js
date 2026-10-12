@@ -88,13 +88,13 @@ return {positions,ayanamsa:ay,dt,jd,form}}
 const YOGINI_NAMES=['Mangala','Pingala','Dhanya','Bhramari','Bhadrika','Ulka','Siddha','Sankata'];
 const YOGINI_RULERS=['Moon','Sun','Jupiter','Mars','Mercury','Saturn','Venus','Rahu'];
 const YOGINI_YEARS=[1,2,3,4,5,6,7,8];
-function dasha(p,dt,system='vimshottari',yearDays=365.2425){
+function dasha(p,dt,system='vimshottari',yearDays=365.2425,reference='janma'){
   const moon=mod(p.Moon), nakSpan=360/27, n=Math.min(26,Math.floor(moon/nakSpan));
   const elapsed=(moon-n*nakSpan)/nakSpan;
   const yogini=system==='yogini';
   const names=yogini?YOGINI_NAMES:LORDS, rulers=yogini?YOGINI_RULERS:LORDS;
   const years=yogini?YOGINI_YEARS:YEARS, total=yogini?36:120;
-  const first=yogini?((n+1+3+7)%8):(n%9);
+  const first=yogini?((n+1+3+7)%8):((n+(reference==='adhana'?7:0))%9);
   const yearMs=yearDays*86400000, birth=dt.getTime();
   let cursor=birth-elapsed*years[first]*yearMs;
   const rows=[];
@@ -115,11 +115,12 @@ function dasha(p,dt,system='vimshottari',yearDays=365.2425){
 }
 let mostRecentChart=null;
 function renderDasha(data){
-  const system=$('dasha-system').value,yearDays=Number($('dasha-year').value);
-  const ds=dasha(data.positions,data.dt,system,yearDays),now=Date.now();
+  const system=$('dasha-system').value,yearDays=Number($('dasha-year').value),reference=$('dasha-reference').value;
+  $('vimshottari-reference-wrap').hidden=system==='yogini';
+  const ds=dasha(data.positions,data.dt,system,yearDays,reference),now=Date.now();
   const current=ds.find(x=>x.start<=now&&now<x.end),sub=current?.ants.find(x=>x.start<=now&&now<x.end);
-  const systemName=system==='yogini'?'Yogini (36 years)':'Vimshottari (120 years)';
-  $('dasha-explanation').textContent=systemName+' · '+yearDays+' days per daśā year · Moon nakshatra at birth: '+nk(data.positions.Moon)+'. Opening period includes the remaining nakshatra balance. '+(system==='yogini'?'Yogini starting lord = remainder of (nakshatra number + 3) / 8.':'Vimshottari follows the nine planetary lords.')+' Antardaśās are proportional divisions of each mahādaśā.';
+  const systemName=system==='yogini'?'Yogini (36 years)':(reference==='adhana'?'Adhana-reference Vimshottari (120 years)':'Vimshottari (120 years)');
+  $('dasha-explanation').textContent=systemName+' · '+yearDays+' days per daśā year · Moon nakshatra at birth: '+nk(data.positions.Moon)+'. Opening period includes the remaining nakshatra balance. '+(system==='yogini'?'Yogini starting lord = remainder of (nakshatra number + 3) / 8.':(reference==='adhana'?'Adhana reference = eighth nakshatra inclusively from Janma ('+N[(Math.floor(mod(data.positions.Moon)/(360/27))+7)%27]+'). The prototype preserves the Moon’s intra-nakshatra elapsed fraction to set the opening balance; this is an explicitly chosen comparison convention, not an independently verified universal classical Adhana balance rule.':'Standard Vimshottari follows the nine planetary lords.'))+' Antardaśās are proportional divisions of each mahādaśā.';
   $('dashas').classList.remove('placeholder');
   $('dashas').innerHTML=ds.map(r=>'<details class="dasha-row '+(r.start<=now&&now<r.end?'current':'')+'" '+(r.start<=now&&now<r.end?'open':'')+'><summary class="dasha-head"><strong>'+esc(r.lord)+' <span class="badge">'+r.years+' yrs</span></strong><small>'+date(r.start)+' — '+date(r.end)+'</small></summary><div class="ad-list">'+r.ants.map(a=>'<div class="ad-row '+(a.start<=now&&now<a.end?'active':'')+'"><span>'+esc(r.lord)+' / '+esc(a.lord)+(system==='yogini'?' ('+esc(a.ruler)+')':'')+'</span><span>'+date(a.start)+' — '+date(a.end)+'</span></div>').join('')+'</div></details>').join('');
   const currentLabel=current?(system==='yogini'?current.lord+' ('+current.ruler+')':current.lord):'Outside range';
@@ -129,6 +130,7 @@ function renderDasha(data){
 }
 $('dasha-system').addEventListener('change',()=>{if(mostRecentChart)renderDasha(mostRecentChart)});
 $('dasha-year').addEventListener('change',()=>{if(mostRecentChart)renderDasha(mostRecentChart)});
+$('dasha-reference').addEventListener('change',()=>{if(mostRecentChart)renderDasha(mostRecentChart)});
 function yogas(p){const result=[],asc=p.Asc,h=n=>house(p[n],asc),same=(a,b)=>sign(p[a])===sign(p[b]),k=n=>[1,4,7,10].includes(h(n)),angular=(a,b)=>[1,4,7,10].includes(house(p[a],p[b]));
 function add(title,proof,reading){result.push({title,proof,reading})}
 if(angular('Jupiter','Moon'))add('Gaja Kesari Yoga','Jupiter occupies a kendra (1st, 4th, 7th, or 10th) from the Moon.','Traditionally associated with counsel, support and knowledge. Full judgment requires dignity, afflictions and strength.');
