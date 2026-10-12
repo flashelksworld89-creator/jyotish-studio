@@ -242,6 +242,50 @@ function renderAspects(data){
  parent.innerHTML='<p class="subtle">'+selectedRows.length+' directional aspects shown. Seven classical planets are aspect sources; Rahu/Ketu aspects vary by school and are not assumed here. A planet in the destination sign is listed separately from the aspected house.</p>'+cards.join('');
 }
 $('aspect-planet').addEventListener('change',()=>{if(mostRecentChart)renderAspects(mostRecentChart)});
+
+const NADI_THEMES={Sun:'authority, visibility and leadership',Moon:'emotion, care and adaptability',Mars:'initiative, pressure and technical work',Mercury:'communication, calculation and commerce',Jupiter:'teaching, judgment and guidance',Venus:'relationships, aesthetics and comforts',Saturn:'responsibility, repetition and long-term duties',Rahu:'amplification, unusual ambitions and foreign influences',Ketu:'detachment, investigation and simplification'};
+const NADI_TYPES={same:'Same-sign conjunction',trine:'Trinal sign connection',next:'Second-sign connection',previous:'Twelfth-sign connection'};
+function nadiRelationships(p){
+ const edges=[];
+ for(let i=0;i<P.length;i++)for(let j=i+1;j<P.length;j++){
+   const a=P[i],b=P[j],forward=(sign(p[b])-sign(p[a])+12)%12;
+   if(forward===0)edges.push({a,b,type:'same',direction:'mutual'});
+   else if(forward===4||forward===8)edges.push({a,b,type:'trine',direction:'mutual'});
+   else if(forward===1)edges.push({a,b,type:'next',direction:a+' → '+b});
+   else if(forward===11)edges.push({a,b,type:'previous',direction:b+' → '+a});
+ }
+ return edges;
+}
+function nadiChains(edges){
+ const graph=Object.fromEntries(P.map(n=>[n,new Set()]));
+ for(const e of edges){graph[e.a].add(e.b);graph[e.b].add(e.a)}
+ const visited=new Set(),components=[];
+ for(const planet of P){
+   if(visited.has(planet))continue;
+   const todo=[planet],group=[];
+   while(todo.length){const n=todo.pop();if(visited.has(n))continue;visited.add(n);group.push(n);for(const next of graph[n])if(!visited.has(next))todo.push(next)}
+   if(group.length>1)components.push(group.sort((a,b)=>P.indexOf(a)-P.indexOf(b)));
+ }
+ return components.sort((a,b)=>b.length-a.length);
+}
+function renderNadi(data){
+ const parent=$('nadi-results');if(!parent)return;
+ const p=data.positions,edges=nadiRelationships(p),filter=$('nadi-planet').value,type=$('nadi-type').value;
+ const matches=edges.filter(e=>(filter==='all'||e.a===filter||e.b===filter)&&(type==='all'||e.type===type));
+ const chains=nadiChains(edges);
+ const cards=matches.map(e=>{
+   const first=fmt(p[e.a]),second=fmt(p[e.b]),h1=house(p[e.a],p.Asc),h2=house(p[e.b],p.Asc);
+   const label=NADI_TYPES[e.type],relationship=e.type==='same'?'share the same sidereal sign':e.type==='trine'?'occupy signs separated by a trinal interval':'occupy neighboring signs';
+   const direction=e.type==='same'||e.type==='trine'?'Two-way sign connection':'Directional sign sequence: '+e.direction;
+   const reading=e.a+' ('+NADI_THEMES[e.a]+') and '+e.b+' ('+NADI_THEMES[e.b]+') '+relationship+'. In a Bhrigu Nandi Nadi-inspired reading, this links the topics of natal houses '+h1+' and '+h2+' through those planetary significations. The connection may be used as a hypothesis for interpretation; it does not establish an event or its timing.';
+   return '<article class="nadi-card"><div class="aspect-card-top"><strong>'+esc(e.a)+' ↔ '+esc(e.b)+'</strong><span>'+esc(label)+'</span></div><p><b>Chart evidence:</b> '+esc(e.a+' '+first+' · house '+h1+'; '+e.b+' '+second+' · house '+h2)+'</p><p>'+esc(reading)+'</p><small>'+esc(direction)+'. Rule conventions vary among Nadi teachers; this implementation is an explicitly labeled comparative model, not an authoritative single-school reading.</small></article>';
+ });
+ const chainText=chains.length?chains.map((group,i)=>'<div class="nadi-chain"><b>Chain '+(i+1)+':</b> '+esc(group.join(' · '))+' <small>'+group.length+' connected planets through supported same-sign, trinal or adjacent-sign links; this is a connected network, not a demonstrated chronological event sequence.</small></div>').join(''):'<p class="subtle">No multi-planet chains were detected with the selected connection rules.</p>';
+ parent.innerHTML='<p class="subtle">'+matches.length+' planetary pairs match the selected filters. Nodes Rahu and Ketu are included here as significators, unlike the seven classical Parashari aspect sources.</p>'+cards.join('')+(matches.length?'':'<p class="subtle">No relationships match this filter.</p>');
+ $('nadi-chains').innerHTML=chainText;
+}
+$('nadi-planet').addEventListener('change',()=>{if(mostRecentChart)renderNadi(mostRecentChart)});
+$('nadi-type').addEventListener('change',()=>{if(mostRecentChart)renderNadi(mostRecentChart)});
 function render(data){const {positions:p,relationships,dt,ayanamsa,form}=data;const now=Date.now();mostRecentChart=data;
 $('generated').textContent=esc(form.name)+' · '+date(dt.getTime())+' UTC '+dt.toISOString().slice(11,16);
 const a=[['Ascendant',Z[sign(p.Asc)],degreeWithinSign(p.Asc)],['Moon sign',Z[sign(p.Moon)],degreeWithinSign(p.Moon)],['Birth nakshatra',nk(p.Moon),'Pada '+(Math.floor((p.Moon%(360/27))/(360/108))+1)],['Current daśā','—','Choose a system']];
@@ -249,7 +293,8 @@ $('highlights').innerHTML=a.map(([label,value,detail])=>'<div class="highlight">
 renderWheel(p);$('positions').innerHTML='<table class="positions-table"><thead><tr><th>Body</th><th>Position</th><th>House</th></tr></thead><tbody>'+['Asc',...P].map(n=>'<tr><td>'+G[n]+' '+n+'</td><td>'+fmt(p[n])+'</td><td>'+(n==='Asc'?'—':house(p[n],p.Asc))+'</td></tr>').join('')+'</tbody></table><p class="subtle">Lahiri ayanamsa: '+ayanamsa.toFixed(5)+'°. Mean Rahu (Ketu exactly opposite). Planet coordinates: Moshier fallback. Ascendant: tropical house calculation minus Lahiri offset.</p>';
 renderDasha(data);
 renderAspects(data);
-if($('relationship-audit')){$('relationship-audit').innerHTML='<p><b>Shared relationship calculations:</b> '+relationships.conjunctions.length+' same-sign pairs · '+relationships.parashari.length+' directional Parashari sign aspects · '+relationships.jaimini.length+' directional Jaimini sign aspects.</p><p>Whole-sign houses from sidereal ascendant. Computed aspects indicate sign relationships; they do not by themselves establish strength, orb or a yoga. Nadi interpretation rules are not enabled yet.</p>';}
+renderNadi(data);
+if($('relationship-audit')){$('relationship-audit').innerHTML='<p><b>Shared relationship calculations:</b> '+relationships.conjunctions.length+' same-sign pairs · '+relationships.parashari.length+' directional Parashari sign aspects · '+relationships.jaimini.length+' directional Jaimini sign aspects.</p><p>Whole-sign houses from sidereal ascendant. Computed aspects indicate sign relationships; they do not by themselves establish strength, orb or a yoga. Nadi-inspired sign-connection analysis is provided separately and is not interchangeable with graha drishti.</p>';}
 const results=yogas(p);$('yogas').classList.remove('placeholder');$('yogas').innerHTML=results.length?'<p class="subtle">'+results.length+' possible combinations found. These are initial detections, not final strength judgments.</p>'+results.map(y=>'<article class="yoga"><span class="yoga-category">'+esc(y.category)+'</span><h3>'+esc(y.title)+'</h3><p>'+esc(y.reading)+'</p><small><b>Calculation evidence:</b> '+esc(y.proof)+'</small><small class="yoga-caveat"><b>Qualification:</b> '+esc(y.caveat)+'</small></article>').join(''):'<p class="subtle">None of the currently implemented yoga conditions were detected. This does not mean the natal chart has no yogas.</p>'}
 $('birth').addEventListener('submit',e=>{e.preventDefault();$('status').classList.remove('error');try{if(!swe)throw Error('Ephemeris has not initialized');if(selectedLocation?.timezone&&!manuallyEditedOffset){try{refreshOffset()}catch(err){locationStatus.textContent='Automatic UTC lookup failed. Enter the UTC offset manually.'}}const v=Object.fromEntries(new FormData(e.currentTarget).entries());if(v.lat===''||v.lon===''||v.offset===''||!Number.isFinite(Number(v.lat))||!Number.isFinite(Number(v.lon))||!Number.isFinite(Number(v.offset)))throw Error('Please select a city or enter latitude, longitude and UTC offset manually.');const data=chart(v);render(data);$('status').textContent='Calculated successfully · '+data.dt.toISOString()+' · all dates in displayed dashas are UTC calendar dates.'}catch(err){console.error(err);$('status').classList.add('error');$('status').textContent='Calculation error: '+err.message}});
 init();
