@@ -8,7 +8,7 @@ const degreeWithinSign=x=>{const n=Math.floor((mod(x)%30)*3600+1e-8);return Stri
 const H=365.2425*86400000;
 let swe;
 const esc=x=>String(x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-async function init(){try{verifyNavamsa();validateRelationshipModel();swe=new SwissEphemeris(); await swe.init(); swe.setSiderealMode(SiderealMode.Lahiri); $('status').textContent='Calculation engine ready. Enter birth details and generate.'; $('calculate').disabled=false}catch(e){$('status').textContent='Ephemeris failed to load: '+e.message;$('status').classList.add('error');$('calculate').disabled=true}}
+async function init(){try{verifyNavamsa();verifyStrengthComponents();validateRelationshipModel();swe=new SwissEphemeris(); await swe.init(); swe.setSiderealMode(SiderealMode.Lahiri); $('status').textContent='Calculation engine ready. Enter birth details and generate.'; $('calculate').disabled=false}catch(e){$('status').textContent='Ephemeris failed to load: '+e.message;$('status').classList.add('error');$('calculate').disabled=true}}
 $('calculate').disabled=true;
 let selectedLocation=null;
 const placeInput=document.querySelector('[name="place"]'), latInput=document.querySelector('[name="lat"]'), lonInput=document.querySelector('[name="lon"]'), offsetInput=document.querySelector('[name="offset"]');
@@ -424,6 +424,21 @@ function renderNavamsa(data){
  }).join('');
  el.innerHTML='<p class="subtle"><b>D9 Ascendant:</b> '+esc(Z[asc9])+'. Each D9 sign and degree comes from the sidereal D1 longitude using nine equal 3°20′ divisions per sign. Houses shown here use whole-sign houses from D9 ascendant; not independently timed house cusps.</p><div class="d9-grid">'+wheel+'</div><table class="positions-table"><thead><tr><th>Body</th><th>D9 zodiacal degree</th><th>House</th><th>D9 dignity</th></tr></thead><tbody>'+rows.map(r=>'<tr><td>'+esc(r.name)+'</td><td>'+esc(Z[r.z]+' '+degreeWithinSign(r.d9Degree))+'</td><td>'+r.house9+'</td><td>'+esc(r.dignity)+'</td></tr>').join('')+'</tbody></table>';
 }
+const EXALTATION_LONGITUDE={Sun:10,Moon:33,Mars:298,Mercury:165,Jupiter:95,Venus:357,Saturn:200};
+const NATURAL_RANK={Sun:7,Moon:6,Venus:5,Jupiter:4,Mercury:3,Mars:2,Saturn:1};
+function uchchaBala(n,longitude){
+ const deb=mod(EXALTATION_LONGITUDE[n]+180),separation=angularSeparation(longitude,deb);
+ return separation/3; // 0..60 virupas, angular distance from exact debilitation point
+}
+function naisargikaBala(n){return 60*NATURAL_RANK[n]/7}
+function verifyStrengthComponents(){
+ for(const n of Object.keys(EXALTATION_LONGITUDE)){
+  if(Math.abs(uchchaBala(n,EXALTATION_LONGITUDE[n])-60)>1e-8 ||
+     Math.abs(uchchaBala(n,mod(EXALTATION_LONGITUDE[n]+180)))>1e-8)
+     throw Error('Uchcha Bala fixture failed for '+n);
+ }
+ if(Math.abs(naisargikaBala('Saturn')-60/7)>1e-8)throw Error('Naisargika Bala fixture failed');
+}
 function renderStrengthFoundation(data){
  const el=$('strength-foundation');if(!el)return;
  const p=data.positions;
@@ -431,10 +446,10 @@ function renderStrengthFoundation(data){
  const rows=classical.map(n=>{
   const d1=planetCondition(n,p),d9=navamsaDignity(n,p[n]);
   const separation=n==='Sun'?null:angularSeparation(p[n],p.Sun);
-  const combustion=n==='Sun'?'Not applicable':(separation<=COMBUST_ORBS[n]?'Possible proximity flag ('+separation.toFixed(2)+'°)':'Outside screening threshold ('+separation.toFixed(2)+'°)');
-  return '<tr><td>'+esc(n)+'</td><td>'+esc(d1)+'</td><td>'+esc(d9)+'</td><td>'+esc(combustion)+'</td></tr>';
+  const combustion=n==='Sun'?'N/A':(separation<=COMBUST_ORBS[n]?'Proximity flag '+separation.toFixed(1)+'°':'No proximity flag');
+  return '<tr><td>'+esc(n)+'</td><td>'+uchchaBala(n,p[n]).toFixed(2)+'</td><td>'+naisargikaBala(n).toFixed(2)+'</td><td>'+esc(d1)+' / '+esc(d9)+'</td><td>'+esc(combustion)+'</td></tr>';
  });
- el.innerHTML='<p class="subtle">Strength evidence currently covers D1/D9 sign dignity and broad angular Sun proximity. <b>Shadbala is not calculated.</b> A classical Shadbala total requires Sthana, Dig, Kala, Cheshta, Naisargika, and Drik Bala with appropriate subdivisions, astronomical inputs and normalization.</p><table class="positions-table"><thead><tr><th>Planet</th><th>D1 sign</th><th>D9 sign</th><th>Sun proximity</th></tr></thead><tbody>'+rows.join('')+'</tbody></table>';
+ el.innerHTML='<p class="subtle"><b>Classical Shadbala: partial calculations only.</b> Values are in virupas (60 virupas = 1 rupa). Uchcha Bala is one subdivision of Sthana Bala, not the complete Sthana Bala. Naisargika Bala is one complete fixed component. No combined total or strength ranking is displayed because other components are missing.</p><table class="positions-table"><thead><tr><th>Planet</th><th>Uchcha Bala</th><th>Naisargika</th><th>D1 / D9 dignity</th><th>Sun proximity</th></tr></thead><tbody>'+rows.join('')+'</tbody></table><div class="shadbala-status"><strong>Component coverage</strong><p>Sthana Bala: Uchcha subdivision implemented; other subdivisions pending.</p><p>Dig Bala: pending · Kala Bala: pending · Cheshta Bala: pending · Naisargika Bala: implemented · Drik Bala: pending.</p></div>';
 }
 const COMBUST_ORBS={Moon:12,Mars:17,Mercury:14,Jupiter:11,Venus:10,Saturn:15};
 function angularSeparation(a,b){const d=Math.abs(mod(a)-mod(b));return Math.min(d,360-d)}
