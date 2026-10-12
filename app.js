@@ -12,7 +12,7 @@ $('calculate').disabled=true;
 let selectedLocation=null;
 const placeInput=document.querySelector('[name="place"]'), latInput=document.querySelector('[name="lat"]'), lonInput=document.querySelector('[name="lon"]'), offsetInput=document.querySelector('[name="offset"]');
 const locationStatus=$('location-status'),locationResults=$('location-results');
-function clearLocation(){selectedLocation=null;latInput.value='';lonInput.value='';offsetInput.value='';locationStatus.textContent='Choose a city from the search results to calculate accurate coordinates.';locationResults.innerHTML=''}
+function clearLocation(){selectedLocation=null;manuallyEditedOffset=false;latInput.value='';lonInput.value='';offsetInput.value='';locationStatus.textContent='Choose a city from the search results to calculate accurate coordinates.';locationResults.innerHTML=''}
 placeInput.addEventListener('input',clearLocation);
 document.querySelector('[name="date"]').addEventListener('change',refreshOffset);
 document.querySelector('[name="time"]').addEventListener('change',refreshOffset);
@@ -37,7 +37,45 @@ function refreshOffset(){
   locationStatus.textContent='Selected: '+selectedLocation.label+' · '+selectedLocation.timezone+' · UTC '+(offset>=0?'+':'')+offset;
 }
 const states={'AL':'Alabama','AK':'Alaska','AZ':'Arizona','AR':'Arkansas','CA':'California','CO':'Colorado','CT':'Connecticut','DE':'Delaware','FL':'Florida','GA':'Georgia','HI':'Hawaii','ID':'Idaho','IL':'Illinois','IN':'Indiana','IA':'Iowa','KS':'Kansas','KY':'Kentucky','LA':'Louisiana','ME':'Maine','MD':'Maryland','MA':'Massachusetts','MI':'Michigan','MN':'Minnesota','MS':'Mississippi','MO':'Missouri','MT':'Montana','NE':'Nebraska','NV':'Nevada','NH':'New Hampshire','NJ':'New Jersey','NM':'New Mexico','NY':'New York','NC':'North Carolina','ND':'North Dakota','OH':'Ohio','OK':'Oklahoma','OR':'Oregon','PA':'Pennsylvania','RI':'Rhode Island','SC':'South Carolina','SD':'South Dakota','TN':'Tennessee','TX':'Texas','UT':'Utah','VT':'Vermont','VA':'Virginia','WA':'Washington','WV':'West Virginia','WI':'Wisconsin','WY':'Wyoming','DC':'District of Columbia'};
-$('lookup').addEventListener('click',async()=>{const parts=placeInput.value.split(',').map(x=>x.trim()).filter(Boolean),city=parts[0],state=parts[1];if(!city){locationStatus.textContent='Enter a city name.';return}locationStatus.textContent='Searching cities…';locationResults.innerHTML='';try{const endpoint='https://geocoding-api.open-meteo.com/v1/search?name='+encodeURIComponent(city)+'&count=100&language=en&format=json';const response=await fetch(endpoint);if(!response.ok)throw Error('Geocoding service returned HTTP '+response.status);const data=await response.json();let items=(data.results||[]).filter(x=>Number.isFinite(x.latitude)&&Number.isFinite(x.longitude)&&x.timezone);if(state){const want=(states[state.toUpperCase()]||state).toLowerCase();const matching=items.filter(x=>[x.admin1,x.admin2,x.country,x.country_code].some(t=>t?.toLowerCase()===want));if(matching.length)items=matching;else{locationStatus.textContent='No match for "'+state+'". Showing possible cities; verify the state carefully.'}}if(!items.length){locationStatus.textContent='No matching city found. Try the city name alone.';return}locationStatus.textContent='Select the correct city, state, and country:';for(const item of items.slice(0,15)){const label=[item.name,item.admin1,item.country].filter(Boolean).join(', ');const btn=document.createElement('button');btn.type='button';btn.className='place-option';btn.textContent=label+' ('+item.latitude.toFixed(4)+', '+item.longitude.toFixed(4)+')';btn.addEventListener('click',()=>{selectedLocation={label,timezone:item.timezone};manuallyEditedOffset=false;placeInput.value=label;latInput.value=item.latitude;lonInput.value=item.longitude;locationResults.innerHTML='';try{refreshOffset()}catch(err){locationStatus.textContent='Coordinates set for '+label+'. Enter UTC offset manually: '+err.message}});locationResults.appendChild(btn)}}catch(err){locationStatus.textContent='Location lookup failed: '+err.message+'. Check your connection and try again.'}});
+async function lookupPlace(){
+  const query=placeInput.value.trim();
+  const parts=query.split(',').map(p=>p.trim()).filter(Boolean);
+  const city=parts[0],region=parts[1];
+  if(!city){locationStatus.textContent='Enter a city and state.';return}
+  const button=$('lookup');button.disabled=true;
+  locationStatus.textContent='Finding coordinates and historical timezone…';
+  locationResults.innerHTML='';
+  try{
+    const response=await fetch('https://geocoding-api.open-meteo.com/v1/search?name='+encodeURIComponent(city)+'&count=100&language=en&format=json');
+    if(!response.ok)throw Error('Geocoding HTTP '+response.status);
+    const data=await response.json();
+    let items=(data.results||[]).filter(x=>Number.isFinite(x.latitude)&&Number.isFinite(x.longitude)&&x.timezone);
+    if(region){
+      const wanted=(states[region.toUpperCase()]||region).toLowerCase();
+      items=items.filter(x=>[x.admin1,x.admin2,x.country,x.country_code].some(v=>v?.toLowerCase()===wanted));
+    }
+    if(!items.length)throw Error('No exact city/state match. Try the full state name or city alone.');
+    const choose=item=>{
+      const label=[item.name,item.admin1,item.country].filter(Boolean).join(', ');
+      selectedLocation={label,timezone:item.timezone};
+      manuallyEditedOffset=false;placeInput.value=label;
+      latInput.value=String(item.latitude);lonInput.value=String(item.longitude);
+      locationResults.innerHTML='';
+      try{refreshOffset()}catch(err){locationStatus.textContent='Coordinates filled for '+label+'. UTC could not be determined: '+err.message}
+    };
+    if(items.length===1){choose(items[0]);return}
+    locationStatus.textContent='Multiple matching places. Select the correct city:';
+    for(const item of items.slice(0,12)){
+      const option=document.createElement('button');option.type='button';option.className='place-option';
+      option.textContent=[item.name,item.admin1,item.country].filter(Boolean).join(', ')+' — '+item.latitude.toFixed(4)+', '+item.longitude.toFixed(4);
+      option.addEventListener('click',()=>choose(item));locationResults.appendChild(option);
+    }
+  }catch(err){locationStatus.textContent='Location lookup: '+err.message}
+  finally{button.disabled=false}
+}
+$('lookup').addEventListener('click',lookupPlace);
+placeInput.addEventListener('change',()=>{if(!selectedLocation&&placeInput.value.trim())lookupPlace()});
+placeInput.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();lookupPlace()}});
 
 function times(form){const [y,m,d]=form.date.split('-').map(Number),[hr,min]=form.time.split(':').map(Number); const offset=Number(form.offset);const ms=Date.UTC(y,m-1,d,hr,min)-offset*3600000;return new Date(ms)}
 function chart(form){const dt=times(form);if(!Number.isFinite(dt.getTime()))throw Error('Invalid date or time');const jd=swe.dateToJulianDay(dt); const ay=swe.getAyanamsaExUt(jd,CalculationFlag.MoshierEphemeris);if(!Number.isFinite(ay))throw Error('Ayanamsa calculation returned invalid data');const flags=CalculationFlag.MoshierEphemeris|CalculationFlag.Speed|CalculationFlag.Sidereal;
