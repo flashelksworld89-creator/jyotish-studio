@@ -85,9 +85,50 @@ const positions={};for(const [name,b] of Object.entries(bodies)){const pos=swe.c
 positions.Ketu=mod(positions.Rahu+180);
 const asc=swe.calculateHouses(jd,Number(form.lat),Number(form.lon),HouseSystem.Placidus).ascendant;if(!Number.isFinite(asc))throw Error('Ascendant calculation failed');positions.Asc=mod(asc-ay);
 return {positions,ayanamsa:ay,dt,jd,form}}
-function dasha(p,dt){const n=Math.floor(p.Moon/(360/27)),fraction=(p.Moon%(360/27))/(360/27); const first=n%9;let cursor=dt.getTime()-fraction*YEARS[first]*H;const rows=[];
-for(let cycle=0;cycle<2;cycle++){for(let j=0;j<9;j++){const k=(first+j)%9,length=YEARS[k],start=cursor,end=start+length*H,ants=[];let sub=start;for(let a=0;a<9;a++){const ix=(k+a)%9,subLen=length*YEARS[ix]/120;ants.push({lord:LORDS[ix],start:sub,end:sub+subLen*H});sub+=subLen*H}rows.push({lord:LORDS[k],start,end,ants});cursor=end} if(cursor>Date.now()+130*H)break}
-return rows.filter(x=>x.end>dt.getTime()-1)}
+const YOGINI_NAMES=['Mangala','Pingala','Dhanya','Bhramari','Bhadrika','Ulka','Siddha','Sankata'];
+const YOGINI_RULERS=['Moon','Sun','Jupiter','Mars','Mercury','Saturn','Venus','Rahu'];
+const YOGINI_YEARS=[1,2,3,4,5,6,7,8];
+function dasha(p,dt,system='vimshottari',yearDays=365.2425){
+  const moon=mod(p.Moon), nakSpan=360/27, n=Math.min(26,Math.floor(moon/nakSpan));
+  const elapsed=(moon-n*nakSpan)/nakSpan;
+  const yogini=system==='yogini';
+  const names=yogini?YOGINI_NAMES:LORDS, rulers=yogini?YOGINI_RULERS:LORDS;
+  const years=yogini?YOGINI_YEARS:YEARS, total=yogini?36:120;
+  const first=yogini?((n+1+3+7)%8):(n%9);
+  const yearMs=yearDays*86400000, birth=dt.getTime();
+  let cursor=birth-elapsed*years[first]*yearMs;
+  const rows=[];
+  // Repeat the full classical cycle until at least 125 years after birth.
+  for(let j=0;j<names.length*12&&cursor<birth+125*yearMs;j++){
+    const k=(first+j)%names.length,length=years[k],start=cursor,end=start+length*yearMs,ants=[];
+    let sub=start;
+    for(let a=0;a<names.length;a++){
+      const ix=(k+a)%names.length;
+      const subEnd=a===names.length-1?end:sub+length*years[ix]/total*yearMs;
+      ants.push({lord:names[ix],ruler:rulers[ix],start:sub,end:subEnd});
+      sub=subEnd;
+    }
+    rows.push({lord:names[k],ruler:rulers[k],years:length,start,end,ants});
+    cursor=end;
+  }
+  return rows.filter(r=>r.end>birth);
+}
+let mostRecentChart=null;
+function renderDasha(data){
+  const system=$('dasha-system').value,yearDays=Number($('dasha-year').value);
+  const ds=dasha(data.positions,data.dt,system,yearDays),now=Date.now();
+  const current=ds.find(x=>x.start<=now&&now<x.end),sub=current?.ants.find(x=>x.start<=now&&now<x.end);
+  const systemName=system==='yogini'?'Yogini (36 years)':'Vimshottari (120 years)';
+  $('dasha-explanation').textContent=systemName+' · '+yearDays+' days per daśā year · Moon nakshatra at birth: '+nk(data.positions.Moon)+'. Opening period includes the remaining nakshatra balance. '+(system==='yogini'?'Yogini starting lord = remainder of (nakshatra number + 3) / 8.':'Vimshottari follows the nine planetary lords.')+' Antardaśās are proportional divisions of each mahādaśā.';
+  $('dashas').classList.remove('placeholder');
+  $('dashas').innerHTML=ds.map(r=>'<details class="dasha-row '+(r.start<=now&&now<r.end?'current':'')+'" '+(r.start<=now&&now<r.end?'open':'')+'><summary class="dasha-head"><strong>'+esc(r.lord)+' <span class="badge">'+r.years+' yrs</span></strong><small>'+date(r.start)+' — '+date(r.end)+'</small></summary><div class="ad-list">'+r.ants.map(a=>'<div class="ad-row '+(a.start<=now&&now<a.end?'active':'')+'"><span>'+esc(r.lord)+' / '+esc(a.lord)+(system==='yogini'?' ('+esc(a.ruler)+')':'')+'</span><span>'+date(a.start)+' — '+date(a.end)+'</span></div>').join('')+'</div></details>').join('');
+  const currentLabel=current?(system==='yogini'?current.lord+' ('+current.ruler+')':current.lord):'Outside range';
+  const subLabel=sub?sub.lord+' antardaśā':'—';
+  const highlights=$('highlights').querySelectorAll('.highlight');
+  if(highlights.length>3){highlights[3].querySelector('strong').textContent=currentLabel;highlights[3].querySelector('small').textContent=subLabel}
+}
+$('dasha-system').addEventListener('change',()=>{if(mostRecentChart)renderDasha(mostRecentChart)});
+$('dasha-year').addEventListener('change',()=>{if(mostRecentChart)renderDasha(mostRecentChart)});
 function yogas(p){const result=[],asc=p.Asc,h=n=>house(p[n],asc),same=(a,b)=>sign(p[a])===sign(p[b]),k=n=>[1,4,7,10].includes(h(n)),angular=(a,b)=>[1,4,7,10].includes(house(p[a],p[b]));
 function add(title,proof,reading){result.push({title,proof,reading})}
 if(angular('Jupiter','Moon'))add('Gaja Kesari Yoga','Jupiter occupies a kendra (1st, 4th, 7th, or 10th) from the Moon.','Traditionally associated with counsel, support and knowledge. Full judgment requires dignity, afflictions and strength.');
@@ -105,12 +146,12 @@ ring.push('<text x="'+tx+'" y="'+ty+'" text-anchor="middle" fill="'+(i===0?'#f1c
 const members=P.filter(n=>sign(p[n])===(ascSign+i));const rad=103;members.forEach((n,j)=>{const a=angle+((j-(members.length-1)/2)*0.11);const r=rad-(j%2)*17;ring.push('<text x="'+(cx+r*Math.cos(a)).toFixed(1)+'" y="'+(cy+r*Math.sin(a)).toFixed(1)+'" fill="#eac38d" font-size="16" text-anchor="middle">'+G[n]+'</text>')})}
 ring.push('<circle cx="210" cy="210" r="47" fill="#0c1420" stroke="#89724f"/>','<text x="210" y="203" text-anchor="middle" font-size="12" fill="#9cacbe">ASC</text>','<text x="210" y="223" text-anchor="middle" font-size="15" fill="#eccc93">'+Z[ascSign]+'</text>');
 $('wheel').innerHTML='<svg viewBox="0 0 420 420" role="img" aria-label="Whole-sign circular chart beginning with the ascendant sign">'+ring.join('')+'</svg>'}
-function render(data){const {positions:p,dt,ayanamsa,form}=data;const ds=dasha(p,dt),now=Date.now(),current=ds.find(x=>x.start<=now&&now<x.end),sub=current?.ants.find(x=>x.start<=now&&now<x.end);
+function render(data){const {positions:p,dt,ayanamsa,form}=data;const now=Date.now();mostRecentChart=data;
 $('generated').textContent=esc(form.name)+' · '+date(dt.getTime())+' UTC '+dt.toISOString().slice(11,16);
-const a=[['Ascendant',Z[sign(p.Asc)],degreeWithinSign(p.Asc)],['Moon sign',Z[sign(p.Moon)],degreeWithinSign(p.Moon)],['Birth nakshatra',nk(p.Moon),'Pada '+(Math.floor((p.Moon%(360/27))/(360/108))+1)],['Current daśā',current?current.lord:'Outside range',sub?sub.lord+' antardaśā':'—']];
+const a=[['Ascendant',Z[sign(p.Asc)],degreeWithinSign(p.Asc)],['Moon sign',Z[sign(p.Moon)],degreeWithinSign(p.Moon)],['Birth nakshatra',nk(p.Moon),'Pada '+(Math.floor((p.Moon%(360/27))/(360/108))+1)],['Current daśā','—','Choose a system']];
 $('highlights').innerHTML=a.map(([label,value,detail])=>'<div class="highlight"><label>'+esc(label)+'</label><strong>'+esc(value)+'</strong><small>'+esc(detail)+'</small></div>').join('');
 renderWheel(p);$('positions').innerHTML='<table class="positions-table"><thead><tr><th>Body</th><th>Position</th><th>House</th></tr></thead><tbody>'+['Asc',...P].map(n=>'<tr><td>'+G[n]+' '+n+'</td><td>'+fmt(p[n])+'</td><td>'+(n==='Asc'?'—':house(p[n],p.Asc))+'</td></tr>').join('')+'</tbody></table><p class="subtle">Lahiri ayanamsa: '+ayanamsa.toFixed(5)+'°. Mean Rahu (Ketu exactly opposite). Planet coordinates: Moshier fallback. Ascendant: tropical house calculation minus Lahiri offset.</p>';
-$('dashas').classList.remove('placeholder');$('dashas').innerHTML=ds.map((r,i)=>'<details class="dasha-row '+(r.start<=now&&now<r.end?'current':'')+'" '+(r.start<=now&&now<r.end?'open':'')+'><summary class="dasha-head"><strong>'+r.lord+' <span class="badge">'+YEARS[LORDS.indexOf(r.lord)]+' yrs</span></strong><small>'+date(r.start)+' — '+date(r.end)+'</small></summary><div class="ad-list">'+r.ants.map(s=>'<div class="ad-row '+(s.start<=now&&now<s.end?'active':'')+'"><span>'+r.lord+' / '+s.lord+'</span><span>'+date(s.start)+' — '+date(s.end)+'</span></div>').join('')+'</div></details>').join('');
+renderDasha(data);
 const results=yogas(p);$('yogas').classList.remove('placeholder');$('yogas').innerHTML=results.length?results.map(y=>'<article class="yoga"><h3>'+esc(y.title)+'</h3><p>'+esc(y.reading)+'</p><small>Rule evidence: '+esc(y.proof)+'</small></article>').join(''):'<p class="subtle">None of the currently implemented yoga conditions were detected. This does not mean the natal chart has no yogas.</p>'}
 $('birth').addEventListener('submit',e=>{e.preventDefault();$('status').classList.remove('error');try{if(!swe)throw Error('Ephemeris has not initialized');if(selectedLocation?.timezone&&!manuallyEditedOffset){try{refreshOffset()}catch(err){locationStatus.textContent='Automatic UTC lookup failed. Enter the UTC offset manually.'}}const v=Object.fromEntries(new FormData(e.currentTarget).entries());if(v.lat===''||v.lon===''||v.offset===''||!Number.isFinite(Number(v.lat))||!Number.isFinite(Number(v.lon))||!Number.isFinite(Number(v.offset)))throw Error('Please select a city or enter latitude, longitude and UTC offset manually.');const data=chart(v);render(data);$('status').textContent='Calculated successfully · '+data.dt.toISOString()+' · all dates in displayed dashas are UTC calendar dates.'}catch(err){console.error(err);$('status').classList.add('error');$('status').textContent='Calculation error: '+err.message}});
 init();
