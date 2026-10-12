@@ -8,7 +8,7 @@ const degreeWithinSign=x=>{const n=Math.floor((mod(x)%30)*3600+1e-8);return Stri
 const H=365.2425*86400000;
 let swe;
 const esc=x=>String(x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-async function init(){try{verifyNavamsa();verifyStrengthComponents();validateRelationshipModel();swe=new SwissEphemeris(); await swe.init(); swe.setSiderealMode(SiderealMode.Lahiri); $('status').textContent='Calculation engine ready. Enter birth details and generate.'; $('calculate').disabled=false}catch(e){$('status').textContent='Ephemeris failed to load: '+e.message;$('status').classList.add('error');$('calculate').disabled=true}}
+async function init(){try{verifyNavamsa();verifyStrengthComponents();verifyVargaSubdivisions();validateRelationshipModel();swe=new SwissEphemeris(); await swe.init(); swe.setSiderealMode(SiderealMode.Lahiri); $('status').textContent='Calculation engine ready. Enter birth details and generate.'; $('calculate').disabled=false}catch(e){$('status').textContent='Ephemeris failed to load: '+e.message;$('status').classList.add('error');$('calculate').disabled=true}}
 $('calculate').disabled=true;
 let selectedLocation=null;
 const placeInput=document.querySelector('[name="place"]'), latInput=document.querySelector('[name="lat"]'), lonInput=document.querySelector('[name="lon"]'), offsetInput=document.querySelector('[name="offset"]');
@@ -455,6 +455,39 @@ function ojayugmaBala(n,p){
  const wantsEven=['Moon','Venus'].includes(n),match=z=>((z+1)%2===0)===wantsEven;
  return (match(sign(p[n]))?15:0)+(match(navamsaSign(p[n]))?15:0);
 }
+// Drekkana strength convention: male planets first 10°, neutral middle 10°, female final 10°.
+function drekkanaBala(n,longitude){
+ const decan=Math.min(2,Math.floor((mod(longitude)%30)/10));
+ const target=['Sun','Mars','Jupiter'].includes(n)?0:['Mercury','Saturn'].includes(n)?1:2;
+ return decan===target?15:0;
+}
+function classicalVargaSign(longitude,division){
+ const z=sign(longitude),within=mod(longitude)%30;
+ if(division===1)return z;
+ if(division===9)return navamsaSign(longitude);
+ if(division===2){ // Parashari Hora: odd signs Sun then Moon; even signs Moon then Sun.
+  const sunHora=(z%2===0)?within<15:within>=15;
+  return sunHora?4:3;
+ }
+ if(division===3)return (z+Math.min(2,Math.floor(within/10))*4)%12;
+ if(division===7)return ((z%2===0?z:z+6)+Math.min(6,Math.floor(within/(30/7))))%12;
+ if(division===12)return (z+Math.min(11,Math.floor(within/2.5)))%12;
+ if(division===30){ // Classical Parashari unequal Trimsamsa portions.
+  const odd=z%2===0;
+  const edges=odd?[5,10,18,25,30]:[5,12,20,25,30];
+  const signs=odd?[0,10,8,2,6]:[1,5,11,9,7];
+  return signs[edges.findIndex(edge=>within<edge)];
+ }
+ throw Error('Unsupported varga D'+division);
+}
+function verifyVargaSubdivisions(){
+ const planets=['Sun','Moon','Mars','Mercury','Jupiter','Venus','Saturn'];
+ if(drekkanaBala('Sun',0)!==15||drekkanaBala('Mercury',15)!==15||drekkanaBala('Venus',25)!==15||drekkanaBala('Sun',25)!==0)throw Error('Drekkana Bala verification failed');
+ for(const n of [1,2,3,7,9,12,30])for(const x of [0,4.999,5,14.999,15,29.999,30,179.99,359.99]){
+  const result=classicalVargaSign(x,n);
+  if(!Number.isInteger(result)||result<0||result>11)throw Error('D'+n+' placement verification failed');
+ }
+}
 function renderStrengthFoundation(data){
  const el=$('strength-foundation');if(!el)return;
  const p=data.positions;
@@ -463,9 +496,10 @@ function renderStrengthFoundation(data){
   const d1=planetCondition(n,p),d9=navamsaDignity(n,p[n]),dig=digBala(n,p,data.mc);
   const separation=n==='Sun'?null:angularSeparation(p[n],p.Sun);
   const combustion=n==='Sun'?'N/A':(separation<=COMBUST_ORBS[n]?'Proximity flag '+separation.toFixed(1)+'°':'No proximity flag');
-  return '<tr><td>'+esc(n)+'</td><td>'+uchchaBala(n,p[n]).toFixed(2)+'</td><td>'+ojayugmaBala(n,p)+'</td><td>'+kendradiBala(n,p)+'</td><td>'+(dig===null?'N/A':dig.toFixed(2))+'</td><td>'+naisargikaBala(n).toFixed(2)+'</td><td>'+esc(d1)+' / '+esc(d9)+'</td><td>'+esc(combustion)+'</td></tr>';
+  return '<tr><td>'+esc(n)+'</td><td>'+uchchaBala(n,p[n]).toFixed(2)+'</td><td>'+ojayugmaBala(n,p)+'</td><td>'+kendradiBala(n,p)+'</td><td>'+drekkanaBala(n,p[n])+'</td><td>'+(dig===null?'N/A':dig.toFixed(2))+'</td><td>'+naisargikaBala(n).toFixed(2)+'</td><td>'+esc(d1)+' / '+esc(d9)+'</td><td>'+esc(combustion)+'</td></tr>';
  });
- el.innerHTML='<p class="subtle"><b>Classical Shadbala: partial calculations only.</b> Values are in virupas (60 virupas = 1 rupa). Uchcha, Ojayugma and Kendradi are subdivisions of Sthana Bala, not the complete Sthana Bala. Naisargika Bala is one complete fixed component. No combined total or strength ranking is displayed because other components are missing.</p><table class="positions-table"><thead><tr><th>Planet</th><th>Uchcha</th><th>Ojayugma</th><th>Kendradi</th><th>Dig Bala</th><th>Naisargika</th><th>D1 / D9 dignity</th><th>Sun proximity</th></tr></thead><tbody>'+rows.join('')+'</tbody></table><div class="shadbala-status"><strong>Component coverage</strong><p>Sthana Bala: Uchcha, Ojayugma and whole-sign Kendradi subdivisions implemented; Saptavargaja and Drekkana pending.</p><p>Dig Bala: calculated from true sidereal Ascendant/MC angles · Kala Bala: pending · Cheshta Bala: pending · Naisargika Bala: implemented · Drik Bala: pending.</p></div>';
+ const vargaDisplay='<details class="shadbala-status"><summary>Seven classical varga placements (D1/D2/D3/D7/D9/D12/D30)</summary><div class="varga-table-wrap"><table class="positions-table"><thead><tr><th>Planet</th>'+[1,2,3,7,9,12,30].map(k=>'<th>D'+k+'</th>').join('')+'</tr></thead><tbody>'+classical.map(n=>'<tr><td>'+esc(n)+'</td>'+[1,2,3,7,9,12,30].map(k=>'<td>'+esc(Z[classicalVargaSign(p[n],k)])+'</td>').join('')+'</tr>').join('')+'</tbody></table></div><p class="subtle">Placements alone are not Saptavargaja Bala: compound sign friendship and Moolatrikona scoring are still pending. D2 and D30 use specified Parashari conventions.</p></details>';
+ el.innerHTML='<p class="subtle"><b>Classical Shadbala: partial calculations only.</b> Values are in virupas (60 virupas = 1 rupa). Uchcha, Ojayugma, Kendradi and Drekkana are subdivisions of Sthana Bala, not the complete Sthana Bala. Naisargika Bala is one complete fixed component. No combined total or strength ranking is displayed because other components are missing.</p><table class="positions-table"><thead><tr><th>Planet</th><th>Uchcha</th><th>Ojayugma</th><th>Kendradi</th><th>Drekkana</th><th>Dig Bala</th><th>Naisargika</th><th>D1 / D9 dignity</th><th>Sun proximity</th></tr></thead><tbody>'+rows.join('')+'</tbody></table>'+vargaDisplay+'<div class="shadbala-status"><strong>Component coverage</strong><p>Sthana Bala: Uchcha, Ojayugma, whole-sign Kendradi and Drekkana implemented; Saptavargaja dignity scoring pending.</p><p>Dig Bala: calculated from true sidereal Ascendant/MC angles · Kala Bala: pending · Cheshta Bala: pending · Naisargika Bala: implemented · Drik Bala: pending.</p></div>';
 }
 const COMBUST_ORBS={Moon:12,Mars:17,Mercury:14,Jupiter:11,Venus:10,Saturn:15};
 function angularSeparation(a,b){const d=Math.abs(mod(a)-mod(b));return Math.min(d,360-d)}
