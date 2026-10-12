@@ -10,9 +10,9 @@ const esc=x=>String(x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'
 async function init(){try{swe=new SwissEphemeris(); await swe.init(); swe.setSiderealMode(SiderealMode.Lahiri); $('status').textContent='Calculation engine ready. Enter birth details and generate.'; $('calculate').disabled=false}catch(e){$('status').textContent='Ephemeris failed to load: '+e.message;$('status').classList.add('error');$('calculate').disabled=true}}
 $('calculate').disabled=true;
 function times(form){const [y,m,d]=form.date.split('-').map(Number),[hr,min]=form.time.split(':').map(Number); const offset=Number(form.offset);const ms=Date.UTC(y,m-1,d,hr,min)-offset*3600000;return new Date(ms)}
-function chart(form){const dt=times(form);if(!Number.isFinite(dt.getTime()))throw Error('Invalid date or time');const jd=swe.dateToJulianDay(dt); const ay=swe.getAyanamsa(jd);const flags=CalculationFlag.MoshierEphemeris|CalculationFlag.Speed;
+function chart(form){const dt=times(form);if(!Number.isFinite(dt.getTime()))throw Error('Invalid date or time');const jd=swe.dateToJulianDay(dt); const ay=swe.getAyanamsaExUt(jd,CalculationFlag.MoshierEphemeris).ayanamsa;const flags=CalculationFlag.MoshierEphemeris|CalculationFlag.Speed|CalculationFlag.Sidereal;
 const bodies={Sun:Planet.Sun,Moon:Planet.Moon,Mars:Planet.Mars,Mercury:Planet.Mercury,Jupiter:Planet.Jupiter,Venus:Planet.Venus,Saturn:Planet.Saturn,Rahu:LunarPoint.MeanNode};
-const positions={};for(const [name,b] of Object.entries(bodies)){const pos=swe.calculatePosition(jd,b,flags); positions[name]=mod(pos.longitude-ay)}
+const positions={};for(const [name,b] of Object.entries(bodies)){const pos=swe.calculatePosition(jd,b,flags); positions[name]=mod(pos.longitude)}
 positions.Ketu=mod(positions.Rahu+180);
 const asc=swe.calculateHouses(jd,Number(form.lat),Number(form.lon),HouseSystem.WholeSign).ascendant;positions.Asc=mod(asc-ay);
 return {positions,ayanamsa:ay,dt,jd,form}}
