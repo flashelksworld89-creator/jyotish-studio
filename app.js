@@ -409,9 +409,32 @@ function navamsaDignity(n,longitude){
  return d.exalt===z?'Exaltation sign':d.debil===z?'Debilitation sign':d.own.includes(z)?'Own sign':'Other sign';
 }
 function renderNavamsa(data){
- const p=data.positions,el=$('navamsa');
- if(!el)return;
- el.innerHTML='<p class="subtle">D9 positions are derived from exact Lahiri sidereal D1 longitudes. This is a divisional sign calculation—not a separately calculated D9 ascendant or a Shadbala score.</p><table class="positions-table"><thead><tr><th>Planet</th><th>D1</th><th>D9 sign</th><th>D9 condition</th></tr></thead><tbody>'+['Sun','Moon','Mars','Mercury','Jupiter','Venus','Saturn','Rahu','Ketu'].map(n=>'<tr><td>'+esc(n)+'</td><td>'+esc(fmt(p[n]))+'</td><td>'+esc(Z[navamsaSign(p[n])])+'</td><td>'+esc(navamsaDignity(n,p[n]))+'</td></tr>').join('')+'</tbody></table>';
+ const p=data.positions,el=$('navamsa');if(!el)return;
+ const asc9=navamsaSign(p.Asc);
+ const bodies=['Asc','Sun','Moon','Mars','Mercury','Jupiter','Venus','Saturn','Rahu','Ketu'];
+ const rows=bodies.map(n=>{
+  const z=navamsaSign(p[n]),house9=(z-asc9+12)%12+1,dignity=n==='Asc'?'—':navamsaDignity(n,p[n]);
+  const part=Math.min(8,Math.floor((mod(p[n])%30)/(30/9)));
+  const d9Degree=((mod(p[n])%30)-(part*30/9))*9;
+  return {name:n,z,house9,dignity,d9Degree};
+ });
+ const wheel=Array.from({length:12},(_,i)=>{
+  const z=(asc9+i)%12,occupied=rows.filter(r=>r.z===z).map(r=>G[r.name]||r.name).join(' ');
+  return '<div class="d9-house"><small>H'+(i+1)+' · '+esc(Z[z])+'</small><strong>'+esc(occupied||'—')+'</strong></div>';
+ }).join('');
+ el.innerHTML='<p class="subtle"><b>D9 Ascendant:</b> '+esc(Z[asc9])+'. Each D9 sign and degree comes from the sidereal D1 longitude using nine equal 3°20′ divisions per sign. Houses shown here use whole-sign houses from D9 ascendant; not independently timed house cusps.</p><div class="d9-grid">'+wheel+'</div><table class="positions-table"><thead><tr><th>Body</th><th>D9 zodiacal degree</th><th>House</th><th>D9 dignity</th></tr></thead><tbody>'+rows.map(r=>'<tr><td>'+esc(r.name)+'</td><td>'+esc(Z[r.z]+' '+degreeWithinSign(r.d9Degree))+'</td><td>'+r.house9+'</td><td>'+esc(r.dignity)+'</td></tr>').join('')+'</tbody></table>';
+}
+function renderStrengthFoundation(data){
+ const el=$('strength-foundation');if(!el)return;
+ const p=data.positions;
+ const classical=['Sun','Moon','Mars','Mercury','Jupiter','Venus','Saturn'];
+ const rows=classical.map(n=>{
+  const d1=planetCondition(n,p),d9=navamsaDignity(n,p[n]);
+  const separation=n==='Sun'?null:angularSeparation(p[n],p.Sun);
+  const combustion=n==='Sun'?'Not applicable':(separation<=COMBUST_ORBS[n]?'Possible proximity flag ('+separation.toFixed(2)+'°)':'Outside screening threshold ('+separation.toFixed(2)+'°)');
+  return '<tr><td>'+esc(n)+'</td><td>'+esc(d1)+'</td><td>'+esc(d9)+'</td><td>'+esc(combustion)+'</td></tr>';
+ });
+ el.innerHTML='<p class="subtle">Strength evidence currently covers D1/D9 sign dignity and broad angular Sun proximity. <b>Shadbala is not calculated.</b> A classical Shadbala total requires Sthana, Dig, Kala, Cheshta, Naisargika, and Drik Bala with appropriate subdivisions, astronomical inputs and normalization.</p><table class="positions-table"><thead><tr><th>Planet</th><th>D1 sign</th><th>D9 sign</th><th>Sun proximity</th></tr></thead><tbody>'+rows.join('')+'</tbody></table>';
 }
 const COMBUST_ORBS={Moon:12,Mars:17,Mercury:14,Jupiter:11,Venus:10,Saturn:15};
 function angularSeparation(a,b){const d=Math.abs(mod(a)-mod(b));return Math.min(d,360-d)}
@@ -449,6 +472,7 @@ renderWheel(p);$('positions').innerHTML='<table class="positions-table"><thead><
 renderDasha(data);
 renderAspects(data);
 renderNavamsa(data);
+renderStrengthFoundation(data);
 renderNadi(data);
 renderJaimini(data);
 if($('relationship-audit')){$('relationship-audit').innerHTML='<p><b>Shared relationship calculations:</b> '+relationships.conjunctions.length+' same-sign pairs · '+relationships.parashari.length+' directional Parashari sign aspects · '+relationships.jaimini.length+' directional Jaimini sign aspects.</p><p>Whole-sign houses from sidereal ascendant. Computed aspects indicate sign relationships; they do not by themselves establish strength, orb or a yoga. Nadi-inspired sign-connection analysis is provided separately and is not interchangeable with graha drishti.</p>';}
