@@ -432,7 +432,7 @@ function uchchaBala(n,longitude){
 }
 function naisargikaBala(n){return 60*NATURAL_RANK[n]/7}
 function verifyStrengthComponents(){
- const fixed={Asc:0,Sun:0,Moon:30,Mars:90,Mercury:180,Jupiter:270,Venus:330,Saturn:45};
+ const fixed={Asc:0,Sun:0,Moon:30,Mars:60,Mercury:180,Jupiter:270,Venus:330,Saturn:45};
  if(kendradiBala('Sun',fixed)!==60||kendradiBala('Moon',fixed)!==30||kendradiBala('Mars',fixed)!==15)throw Error('Kendradi fixture failed');
  for(const n of Object.keys(EXALTATION_LONGITUDE)){
   if(Math.abs(uchchaBala(n,EXALTATION_LONGITUDE[n])-60)>1e-8 ||
