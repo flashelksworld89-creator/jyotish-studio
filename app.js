@@ -286,6 +286,32 @@ function renderNadi(data){
 }
 $('nadi-planet').addEventListener('change',()=>{if(mostRecentChart)renderNadi(mostRecentChart)});
 $('nadi-type').addEventListener('change',()=>{if(mostRecentChart)renderNadi(mostRecentChart)});
+
+const KARAKA_NAMES=['Atmakaraka','Amatyakaraka','Bhratrikaraka','Matrikaraka','Putrakaraka','Gnatikaraka','Darakaraka'];
+function charaKarakas(positions){
+ // Seven-karaka scheme, using sidereal degrees within each sign; nodes excluded.
+ const seven=['Sun','Moon','Mars','Mercury','Jupiter','Venus','Saturn'];
+ return seven.map(n=>({name:n,degree:mod(positions[n])%30}))
+   .sort((a,b)=>b.degree-a.degree||seven.indexOf(a.name)-seven.indexOf(b.name))
+   .map((item,i)=>({...item,role:KARAKA_NAMES[i]}));
+}
+function renderJaimini(data){
+ const el=$('jaimini-results');if(!el)return;
+ const p=data.positions,r=data.relationships,selected=$('jaimini-sign').value;
+ const karakas=charaKarakas(p),roles=Object.fromEntries(karakas.map(k=>[k.name,k.role]));
+ const signMode=z=>z%3===0?'movable':z%3===1?'fixed':'dual';
+ const rows=r.jaimini.filter(a=>a.fromPlanets.length&&(selected==='all'||a.fromSign===Number(selected)));
+ const relevant=rows.map(a=>{
+  const sources=a.fromPlanets.map(n=>n+' ('+(roles[n]||'node')+')').join(', ');
+  const recipients=a.toPlanets.length?a.toPlanets.map(n=>n+' ('+(roles[n]||'node')+', '+fmt(p[n])+')').join('; '):'No natal planet in this sign';
+  const h=((a.toSign-sign(p.Asc)+12)%12)+1;
+  const reading='Planets in '+Z[a.fromSign]+' influence '+Z[a.toSign]+' by Jaimini Rashi Drishti. This directs attention to natal house '+h+' ('+HOUSE_TOPICS[h-1]+') and '+(a.toPlanets.length?'the receiving planetary significations.':'the unoccupied receiving sign and its house lord.')+' Chara Karaka roles identify personal significators, not a prediction by themselves.';
+  return '<article class="jaimini-card"><div class="aspect-card-top"><strong>'+esc(Z[a.fromSign])+' → '+esc(Z[a.toSign])+'</strong><span>'+signMode(a.fromSign)+' → '+signMode(a.toSign)+'</span></div><p><b>Source planets:</b> '+esc(sources)+'</p><p><b>Receiving planets:</b> '+esc(recipients)+'</p><p>'+esc(reading)+'</p><small>Sign aspect, not Parashari graha drishti. All planets in the source sign share this sign relationship. Node karaka assignments are excluded in the seven-karaka model.</small></article>';
+ });
+ $('jaimini-karakas').innerHTML=karakas.map(k=>'<div class="karaka-row"><b>'+esc(k.role)+'</b><span>'+esc(k.name)+' · '+esc(fmt(p[k.name]))+'</span></div>').join('')+'<p class="subtle">Seven-karaka convention: ranked by sidereal degrees traversed within each sign, highest to lowest. Ties use a stable ordering for display and should be reviewed manually.</p>';
+ el.innerHTML='<p class="subtle">'+relevant.length+' directional sign aspects from occupied signs match this filter. Empty receiving signs are shown because Jaimini aspects operate between signs, not only planets.</p>'+(relevant.length?relevant.join(''):'<p class="subtle">No matching occupied source sign aspects.</p>');
+}
+$('jaimini-sign').addEventListener('change',()=>{if(mostRecentChart)renderJaimini(mostRecentChart)});
 function render(data){const {positions:p,relationships,dt,ayanamsa,form}=data;const now=Date.now();mostRecentChart=data;
 $('generated').textContent=esc(form.name)+' · '+date(dt.getTime())+' UTC '+dt.toISOString().slice(11,16);
 const a=[['Ascendant',Z[sign(p.Asc)],degreeWithinSign(p.Asc)],['Moon sign',Z[sign(p.Moon)],degreeWithinSign(p.Moon)],['Birth nakshatra',nk(p.Moon),'Pada '+(Math.floor((p.Moon%(360/27))/(360/108))+1)],['Current daśā','—','Choose a system']];
@@ -294,6 +320,7 @@ renderWheel(p);$('positions').innerHTML='<table class="positions-table"><thead><
 renderDasha(data);
 renderAspects(data);
 renderNadi(data);
+renderJaimini(data);
 if($('relationship-audit')){$('relationship-audit').innerHTML='<p><b>Shared relationship calculations:</b> '+relationships.conjunctions.length+' same-sign pairs · '+relationships.parashari.length+' directional Parashari sign aspects · '+relationships.jaimini.length+' directional Jaimini sign aspects.</p><p>Whole-sign houses from sidereal ascendant. Computed aspects indicate sign relationships; they do not by themselves establish strength, orb or a yoga. Nadi-inspired sign-connection analysis is provided separately and is not interchangeable with graha drishti.</p>';}
 const results=yogas(p);$('yogas').classList.remove('placeholder');$('yogas').innerHTML=results.length?'<p class="subtle">'+results.length+' possible combinations found. These are initial detections, not final strength judgments.</p>'+results.map(y=>'<article class="yoga"><span class="yoga-category">'+esc(y.category)+'</span><h3>'+esc(y.title)+'</h3><p>'+esc(y.reading)+'</p><small><b>Calculation evidence:</b> '+esc(y.proof)+'</small><small class="yoga-caveat"><b>Qualification:</b> '+esc(y.caveat)+'</small></article>').join(''):'<p class="subtle">None of the currently implemented yoga conditions were detected. This does not mean the natal chart has no yogas.</p>'}
 $('birth').addEventListener('submit',e=>{e.preventDefault();$('status').classList.remove('error');try{if(!swe)throw Error('Ephemeris has not initialized');if(selectedLocation?.timezone&&!manuallyEditedOffset){try{refreshOffset()}catch(err){locationStatus.textContent='Automatic UTC lookup failed. Enter the UTC offset manually.'}}const v=Object.fromEntries(new FormData(e.currentTarget).entries());if(v.lat===''||v.lon===''||v.offset===''||!Number.isFinite(Number(v.lat))||!Number.isFinite(Number(v.lon))||!Number.isFinite(Number(v.offset)))throw Error('Please select a city or enter latitude, longitude and UTC offset manually.');const data=chart(v);render(data);$('status').textContent='Calculated successfully · '+data.dt.toISOString()+' · all dates in displayed dashas are UTC calendar dates.'}catch(err){console.error(err);$('status').classList.add('error');$('status').textContent='Calculation error: '+err.message}});
