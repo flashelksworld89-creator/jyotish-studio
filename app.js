@@ -171,7 +171,7 @@ function renderDasha(data){
   if(highlights.length>3){highlights[3].querySelector('strong').textContent=currentLabel;highlights[3].querySelector('small').textContent=subLabel}
 }
 $('dasha-system').addEventListener('change',()=>{if(mostRecentChart)renderDasha(mostRecentChart)});
-$('dasha-year').addEventListener('change',()=>{if(mostRecentChart)renderDasha(mostRecentChart)});
+$('dasha-year').addEventListener('change',()=>{if(mostRecentChart){renderDasha(mostRecentChart);renderNatalReport(mostRecentChart)}});
 $('dasha-reference').addEventListener('change',()=>{if(mostRecentChart)renderDasha(mostRecentChart)});
 function yogas(p,relationships){
  const result=[],asc=p.Asc,hs=n=>house(p[n],asc),same=(a,b)=>sign(p[a])===sign(p[b]);
