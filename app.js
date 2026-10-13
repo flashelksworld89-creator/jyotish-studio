@@ -602,7 +602,8 @@ function renderNatalReport(data){
 $('copy-natal-report').addEventListener('click',()=>{
  if(!mostRecentChart)return;
  const report=buildNatalReport(mostRecentChart);
- const content='JYOTISH STUDIO — NATAL ANALYSIS\n\n'+report.summary+'\n\n'+report.timing+'\n\n'+report.sections.map(s=>s.title+'\n'+s.text+'\nEvidence:\n'+s.evidence.map(x=>'- '+x).join('\n')).join('\n\n')+'\n\nTraditional interpretive framework; not scientifically verified predictions.';
+ const nl=String.fromCharCode(10);
+ const content=['JYOTISH STUDIO — NATAL ANALYSIS',report.summary,report.timing,...report.sections.map(x=>[x.title,x.text,'Evidence:',...x.evidence.map(v=>'- '+v)].join(nl)),'Traditional interpretive framework; not scientifically verified predictions.'].join(nl+nl);
  if(navigator.clipboard?.writeText){navigator.clipboard.writeText(content).then(()=>$('report-copy-status').textContent='Report copied.',()=>$('report-copy-status').textContent='Clipboard unavailable in this browser.');}
  else $('report-copy-status').textContent='Clipboard is unavailable in this browser.';
 });
