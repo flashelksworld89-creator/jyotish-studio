@@ -555,6 +555,57 @@ function yogaConditionReview(y,p,r){
   status:cautions.length?'Qualifying combination with caution flags':'Qualifying combination; strength undetermined',
   cancellation:'Not established — no complete cancellation rule set has been applied'};
 }
+
+const REPORT_TOPICS=[
+ {title:'Identity and direction',houses:[1,5,9]},
+ {title:'Career and work',houses:[10,6,2]},
+ {title:'Finances and resources',houses:[2,11,5]},
+ {title:'Relationships and partnership',houses:[7,4,11]},
+ {title:'Home and family',houses:[4,2,12]},
+ {title:'Learning and development',houses:[5,9,3]}
+];
+function buildNatalReport(data){
+ const p=data.positions,r=data.relationships,ascSign=sign(p.Asc);
+ const l=h=>RULERS[(ascSign+h-1)%12];
+ const yogasFound=yogas(p,r);
+ const current=dasha(p,data.dt,'vimshottari',Number($('dasha-year').value),'janma').find(x=>x.start<=Date.now()&&x.end>Date.now());
+ const sections=REPORT_TOPICS.map(topic=>{
+  const evidence=[],sentences=[],used=new Set();
+  for(const h of topic.houses){
+   const lord=l(h),placement=house(p[lord],p.Asc),d1=planetCondition(lord,p),d9=navamsaDignity(lord,p[lord]);
+   evidence.push('House '+h+' lord '+lord+' at '+fmt(p[lord])+' in house '+placement+' (D1 '+d1.toLowerCase()+', D9 '+d9.toLowerCase()+')');
+   if(!used.has(lord)){
+    const ruled=r.planets[lord]?.ruledHouses||[];
+    sentences.push(lord+' connects house '+h+' with house '+placement+(ruled.length>1?' while also ruling house '+ruled.filter(x=>x!==h).join(' and '):'')+'. In this traditional reading, '+PLANET_ACTIONS[lord]+' becomes a route through which these topics may interact.');
+    used.add(lord);
+   }
+  }
+  const sourceHouses=new Set(topic.houses);
+  const keyAspects=r.parashari.filter(a=>sourceHouses.has(a.targetHouse));
+  if(keyAspects.length){
+   const top=keyAspects.slice(0,4);
+   sentences.push('Additional emphasis comes from '+top.map(a=>a.source+'\u2019s '+a.step+'th aspect to house '+a.targetHouse).join(', ')+'. These are whole-sign aspects and do not establish outcome strength.');
+   evidence.push(...top.map(a=>a.source+' '+fmt(p[a.source])+' aspects house '+a.targetHouse));
+  }
+  const relevantYogas=yogasFound.filter(y=>topic.houses.some(h=>y.proof.includes('house '+h)||y.proof.includes(h+'th lord'))).slice(0,2);
+  if(relevantYogas.length)sentences.push('Yoga screening also flags '+relevantYogas.map(y=>y.title).join(' and ')+'. This is structural evidence, not a guarantee of results.');
+  return {title:topic.title,text:sentences.join(' '),evidence,yogas:relevantYogas.map(y=>y.title)};
+ });
+ const timing=current?'Current Janma Vimshottari mahadasha: '+current.lord+' ('+date(current.start)+' to '+date(current.end)+'). This period emphasizes the natal houses ruled by '+current.lord+' and the house it occupies; the timing has not been independently validated against reference dasha software.':'The current time falls outside the calculated Janma Vimshottari window.';
+ return {sections,timing,summary:'Sidereal '+Z[ascSign]+' ascendant at '+fmt(p.Asc)+', with Moon at '+fmt(p.Moon)+' in '+nk(p.Moon)+'. The following themes synthesize natal rulerships and directional Parashari aspects. They are traditional interpretive possibilities rather than verified predictions.'};
+}
+function renderNatalReport(data){
+ const target=$('natal-report');if(!target)return;
+ const report=buildNatalReport(data);
+ target.innerHTML='<p>'+esc(report.summary)+'</p><p class="report-timing">'+esc(report.timing)+'</p>'+report.sections.map(section=>'<article class="report-section"><h3>'+esc(section.title)+'</h3><p>'+esc(section.text)+'</p><details><summary>View chart evidence</summary><ul>'+section.evidence.map(line=>'<li>'+esc(line)+'</li>').join('')+'</ul></details></article>').join('')+'<p class="subtle">Report basis: D1 whole-sign placements, Parashari aspect rules, D1/D9 dignity and selected yoga screening. D9 dignity is not used to assert cancellation; incomplete Shadbala components are excluded.</p>';
+}
+$('copy-natal-report').addEventListener('click',()=>{
+ if(!mostRecentChart)return;
+ const report=buildNatalReport(mostRecentChart);
+ const content='JYOTISH STUDIO — NATAL ANALYSIS\n\n'+report.summary+'\n\n'+report.timing+'\n\n'+report.sections.map(s=>s.title+'\n'+s.text+'\nEvidence:\n'+s.evidence.map(x=>'- '+x).join('\n')).join('\n\n')+'\n\nTraditional interpretive framework; not scientifically verified predictions.';
+ if(navigator.clipboard?.writeText){navigator.clipboard.writeText(content).then(()=>$('report-copy-status').textContent='Report copied.',()=>$('report-copy-status').textContent='Clipboard unavailable in this browser.');}
+ else $('report-copy-status').textContent='Clipboard is unavailable in this browser.';
+});
 function render(data){const {positions:p,relationships,dt,ayanamsa,form}=data;const now=Date.now();mostRecentChart=data;
 $('generated').textContent=esc(form.name)+' · '+date(dt.getTime())+' UTC '+dt.toISOString().slice(11,16);
 const a=[['Ascendant',Z[sign(p.Asc)],degreeWithinSign(p.Asc)],['Moon sign',Z[sign(p.Moon)],degreeWithinSign(p.Moon)],['Birth nakshatra',nk(p.Moon),'Pada '+(Math.floor((p.Moon%(360/27))/(360/108))+1)],['Current daśā','—','Choose a system']];
@@ -566,6 +617,7 @@ renderNavamsa(data);
 renderStrengthFoundation(data);
 renderNadi(data);
 renderJaimini(data);
+renderNatalReport(data);
 if($('relationship-audit')){$('relationship-audit').innerHTML='<p><b>Shared relationship calculations:</b> '+relationships.conjunctions.length+' same-sign pairs · '+relationships.parashari.length+' directional Parashari sign aspects · '+relationships.jaimini.length+' directional Jaimini sign aspects.</p><p>Whole-sign houses from sidereal ascendant. Computed aspects indicate sign relationships; they do not by themselves establish strength, orb or a yoga. Nadi-inspired sign-connection analysis is provided separately and is not interchangeable with graha drishti.</p>';}
 const results=yogas(p,relationships);for(const y of results)y.review=yogaConditionReview(y,p,relationships);$('yogas').classList.remove('placeholder');$('yogas').innerHTML=results.length?'<p class="subtle">'+results.length+' possible combinations found. These are initial detections, not final strength judgments.</p>'+results.map(y=>'<article class="yoga"><span class="yoga-category">'+esc(y.category)+'</span><h3>'+esc(y.title)+'</h3><p>'+esc(y.reading)+'</p><small><b>Calculation evidence:</b> '+esc(y.proof)+'</small><small class="yoga-caveat"><b>Qualification:</b> '+esc(y.caveat)+'</small><small class="yoga-review"><b>Assessment:</b> '+esc(y.review.status)+'<br><b>Dignity:</b> '+esc(y.review.dignity.join('; ')||'Not applicable')+'<br><b>Support:</b> '+esc(y.review.positive.join('; ')||'None identified by implemented rules')+'<br><b>Cautions:</b> '+esc(y.review.cautions.join('; ')||'None identified by implemented rules')+'<br><b>Received aspects:</b> '+esc(y.review.unassessed.join('; ')||'No additional indicators')+'<br><b>Cancellation:</b> '+esc(y.review.cancellation)+'</small>'+(y.qualifiers?.length?'<small><b>Condition indicators:</b> '+esc(y.qualifiers.join('; '))+'</small>':'')+(y.otherSystems?.length?'<small><b>Other systems (not yoga proof):</b> '+esc(y.otherSystems.join(' '))+'</small>':'')+'</article>').join(''):'<p class="subtle">None of the currently implemented yoga conditions were detected. This does not mean the natal chart has no yogas.</p>'}
 $('birth').addEventListener('submit',e=>{e.preventDefault();$('status').classList.remove('error');try{if(!swe)throw Error('Ephemeris has not initialized');if(selectedLocation?.timezone&&!manuallyEditedOffset){try{refreshOffset()}catch(err){locationStatus.textContent='Automatic UTC lookup failed. Enter the UTC offset manually.'}}const v=Object.fromEntries(new FormData(e.currentTarget).entries());if(v.lat===''||v.lon===''||v.offset===''||!Number.isFinite(Number(v.lat))||!Number.isFinite(Number(v.lon))||!Number.isFinite(Number(v.offset)))throw Error('Please select a city or enter latitude, longitude and UTC offset manually.');const data=chart(v);render(data);$('status').textContent='Calculated successfully · '+data.dt.toISOString()+' · all dates in displayed dashas are UTC calendar dates.'}catch(err){console.error(err);$('status').classList.add('error');$('status').textContent='Calculation error: '+err.message}});
