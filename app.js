@@ -565,34 +565,42 @@ const REPORT_TOPICS=[
  {title:'Learning and development',houses:[5,9,3]}
 ];
 function buildNatalReport(data){
- const p=data.positions,r=data.relationships,ascSign=sign(p.Asc);
- const l=h=>RULERS[(ascSign+h-1)%12];
- const yogasFound=yogas(p,r);
- const current=dasha(p,data.dt,'vimshottari',Number($('dasha-year').value),'janma').find(x=>x.start<=Date.now()&&x.end>Date.now());
+ const p=data.positions,r=data.relationships,ascSign=sign(p.Asc),l=h=>RULERS[(ascSign+h-1)%12];
+ const yogasFound=yogas(p,r),now=Date.now(),period=dasha(p,data.dt,'vimshottari',Number($('dasha-year').value),'janma').find(x=>x.start<=now&&x.end>now);
+ const sub=period?.ants.find(x=>x.start<=now&&x.end>now);
+ const nakLord=n=>LORDS[Math.floor(mod(p[n])/(360/27))%9];
  const sections=REPORT_TOPICS.map(topic=>{
-  const evidence=[],sentences=[],used=new Set();
+  const evidence=[],paragraphs=[],used=new Set(),sourceHouses=new Set(topic.houses);
   for(const h of topic.houses){
-   const lord=l(h),placement=house(p[lord],p.Asc),d1=planetCondition(lord,p),d9=navamsaDignity(lord,p[lord]);
-   evidence.push('House '+h+' lord '+lord+' at '+fmt(p[lord])+' in house '+placement+' (D1 '+d1.toLowerCase()+', D9 '+d9.toLowerCase()+')');
-   if(!used.has(lord)){
-    const ruled=r.planets[lord]?.ruledHouses||[];
-    sentences.push(lord+' connects house '+h+' with house '+placement+(ruled.length>1?' while also ruling house '+ruled.filter(x=>x!==h).join(' and '):'')+'. In this traditional reading, '+PLANET_ACTIONS[lord]+' becomes a route through which these topics may interact.');
-    used.add(lord);
-   }
+   const lord=l(h),place=house(p[lord],p.Asc),dispositor=RULERS[sign(p[lord])],lordNak=nakLord(lord),ruled=r.planets[lord]?.ruledHouses||[];
+   evidence.push('House '+h+' lord '+lord+' at '+fmt(p[lord])+' in house '+place+' · '+nk(p[lord])+' · D9 '+Z[navamsaSign(p[lord])]);
+   if(used.has(lord))continue;used.add(lord);
+   const effects='The ruler of house '+h+' ('+HOUSE_TOPICS[h-1]+') occupies house '+place+' ('+HOUSE_TOPICS[place-1]+'). '+lord+' therefore joins these two areas through '+PLANET_ACTIONS[lord]+'.';
+   const additional=ruled.filter(x=>x!==h).map(x=>'house '+x+' ('+HOUSE_TOPICS[x-1]+')').join(' and ');
+   const pathway=dispositor===lord?'It occupies its own sign, making '+lord+' the final sign dispositor in this chain.':'Its sign dispositor '+dispositor+' occupies house '+house(p[dispositor],p.Asc)+', bringing '+HOUSE_TOPICS[house(p[dispositor],p.Asc)-1]+' into the interpretation.';
+   const nakpath='In '+nk(p[lord])+' (nakshatra lord '+lordNak+'), the nakshatra ruler occupies house '+house(p[lordNak],p.Asc)+'.';
+   const condition='D1 condition: '+planetCondition(lord,p).toLowerCase()+'; D9: '+navamsaDignity(lord,p[lord]).toLowerCase()+'.';
+   paragraphs.push(effects+(additional?' The planet also rules '+additional+'.':'')+' '+pathway+' '+nakpath+' '+condition);
+   evidence.push('Dispositor: '+dispositor+' '+fmt(p[dispositor])+' in house '+house(p[dispositor],p.Asc));
+   evidence.push('Nakshatra lord: '+lordNak+' '+fmt(p[lordNak])+' in house '+house(p[lordNak],p.Asc));
   }
-  const sourceHouses=new Set(topic.houses);
-  const keyAspects=r.parashari.filter(a=>sourceHouses.has(a.targetHouse));
-  if(keyAspects.length){
-   const top=keyAspects.slice(0,4);
-   sentences.push('Additional emphasis comes from '+top.map(a=>a.source+'\u2019s '+a.step+'th aspect to house '+a.targetHouse).join(', ')+'. These are whole-sign aspects and do not establish outcome strength.');
+  const incoming=r.parashari.filter(a=>sourceHouses.has(a.targetHouse));
+  if(incoming.length){
+   const top=incoming.slice(0,3);
+   paragraphs.push('Parashari aspects reach the relevant houses from '+top.map(a=>a.source+' ('+a.step+'th aspect to house '+a.targetHouse+')').join(', ')+'. These bring the natal agendas of the aspecting planets into the same topics, without proving a particular event.');
    evidence.push(...top.map(a=>a.source+' '+fmt(p[a.source])+' aspects house '+a.targetHouse));
   }
   const relevantYogas=yogasFound.filter(y=>topic.houses.some(h=>y.proof.includes('house '+h)||y.proof.includes(h+'th lord'))).slice(0,2);
-  if(relevantYogas.length)sentences.push('Yoga screening also flags '+relevantYogas.map(y=>y.title).join(' and ')+'. This is structural evidence, not a guarantee of results.');
-  return {title:topic.title,text:sentences.join(' '),evidence,yogas:relevantYogas.map(y=>y.title)};
+  if(relevantYogas.length)paragraphs.push('The yoga screen identifies '+relevantYogas.map(y=>y.title).join(' and ')+'. Its strength and cancellation conditions remain subject to the separate yoga assessment.');
+  if(period&&used.has(period.lord)){
+   paragraphs.push('Timing emphasis: '+period.lord+' mahadasha is currently active and directly involves this report topic through its house lordship. '+(sub?'The '+sub.lord+' antardasha adds its house '+house(p[sub.lord],p.Asc)+' placement and natal rulerships to the period.':''));
+  }else if(sub&&used.has(sub.lord)){
+   paragraphs.push('Timing emphasis: the current '+sub.lord+' antardasha connects this subject to the active '+period.lord+' mahadasha; the outcome depends on both natal placements.');
+  }
+  return {title:topic.title,text:paragraphs.join(' '),evidence,yogas:relevantYogas.map(y=>y.title)};
  });
- const timing=current?'Current Janma Vimshottari mahadasha: '+current.lord+' ('+date(current.start)+' to '+date(current.end)+'). This period emphasizes the natal houses ruled by '+current.lord+' and the house it occupies; the timing has not been independently validated against reference dasha software.':'The current time falls outside the calculated Janma Vimshottari window.';
- return {sections,timing,summary:'Sidereal '+Z[ascSign]+' ascendant at '+fmt(p.Asc)+', with Moon at '+fmt(p.Moon)+' in '+nk(p.Moon)+'. The following themes synthesize natal rulerships and directional Parashari aspects. They are traditional interpretive possibilities rather than verified predictions.'};
+ const timing=period?'Current Janma Vimshottari: '+period.lord+' mahadasha ('+date(period.start)+' – '+date(period.end)+')'+(sub?'; '+sub.lord+' antardasha ('+date(sub.start)+' – '+date(sub.end)+')':'')+'. Dates use the selected year convention and are not independently reference-validated.':'No active period appears in the currently calculated Janma Vimshottari range.';
+ return {sections,timing,summary:'Sidereal '+Z[ascSign]+' ascendant at '+fmt(p.Asc)+', with Moon at '+fmt(p.Moon)+' in '+nk(p.Moon)+'. These topic analyses combine natal house lordships, planetary dispositors, nakshatra rulers, aspects and selected yoga screening. They represent traditional interpretations, not established future outcomes.'};
 }
 function renderNatalReport(data){
  const target=$('natal-report');if(!target)return;
