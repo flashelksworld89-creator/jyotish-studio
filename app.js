@@ -602,6 +602,47 @@ function buildNatalReport(data){
  const timing=period?'Current Janma Vimshottari: '+period.lord+' mahadasha ('+date(period.start)+' – '+date(period.end)+')'+(sub?'; '+sub.lord+' antardasha ('+date(sub.start)+' – '+date(sub.end)+')':'')+'. Dates use the selected year convention and are not independently reference-validated.':'No active period appears in the currently calculated Janma Vimshottari range.';
  return {sections,timing,summary:'Sidereal '+Z[ascSign]+' ascendant at '+fmt(p.Asc)+', with Moon at '+fmt(p.Moon)+' in '+nk(p.Moon)+'. These topic analyses combine natal house lordships, planetary dispositors, nakshatra rulers, aspects and selected yoga screening. They represent traditional interpretations, not established future outcomes.'};
 }
+
+function renderPeriodReport(data){
+ const out=$('period-report');if(!out)return;
+ const p=data.positions,r=data.relationships,raw=$('period-date').value;
+ const time=Date.parse(raw+'T12:00:00Z');
+ if(!Number.isFinite(time)){out.textContent='Choose a valid analysis date.';return}
+ const yearDays=Number($('dasha-year').value);
+ const periods=dasha(p,data.dt,'vimshottari',yearDays,'janma');
+ const md=periods.find(x=>x.start<=time&&time<x.end);
+ const ad=md?.ants.find(x=>x.start<=time&&time<x.end);
+ if(!md||!ad){out.textContent='This date is outside the available Janma Vimshottari calculation range. Choose a date within the generated periods.';return}
+ const lords=[md.lord,ad.lord],asc=sign(p.Asc);
+ const rulership=n=>[...Array(12)].map((_,i)=>i+1).filter(h=>RULERS[(asc+h-1)%12]===n);
+ const factors=lords.map((n,i)=>{
+  const h=house(p[n],p.Asc),houses=rulership(n),disp=RULERS[sign(p[n])],nakr=LORDS[Math.floor(mod(p[n])/(360/27))%9];
+  const influenced=r.parashari.filter(a=>a.source===n).map(a=>'house '+a.targetHouse);
+  const incoming=r.parashari.filter(a=>a.targets.includes(n)).map(a=>a.source);
+  return {n,role:i?'Antardasha':'Mahadasha',h,houses,disp,nakr,influenced:[...new Set(influenced)],incoming:[...new Set(incoming)],d1:planetCondition(n,p),d9:navamsaDignity(n,p[n])};
+ });
+ const joint=lords[0]===lords[1]?'Both levels are ruled by '+lords[0]+'.':sign(p[md.lord])===sign(p[ad.lord])?'The two period lords share a natal sign.':house(p[md.lord],p[ad.lord])===7?'The period lords occupy opposing natal signs.':'The period lords occupy houses '+factors[0].h+' and '+factors[1].h+'.';
+ const topics=REPORT_TOPICS.map(topic=>{
+  const hits=factors.map(f=>({f,hits:f.houses.filter(x=>topic.houses.includes(x)),placement:topic.houses.includes(f.h),aspects:f.influenced.filter(x=>topic.houses.includes(Number(x.split(' ')[1])))}));
+  const relevant=hits.some(v=>v.hits.length||v.placement||v.aspects.length);
+  if(!relevant)return null;
+  const reasons=hits.filter(v=>v.hits.length||v.placement||v.aspects.length).map(v=>{
+   const f=v.f,links=[];
+   if(v.hits.length)links.push('rules house '+v.hits.join(' and '));
+   if(v.placement)links.push('occupies house '+f.h);
+   if(v.aspects.length)links.push('aspects '+v.aspects.join(', '));
+   return f.role+' '+f.n+' '+links.join(', ');
+  });
+  return {name:topic.title,text:'This period highlights '+topic.title.toLowerCase()+' because '+reasons.join('; ')+'. '+joint+' Assess the two rulers together: their natal placement and dispositors describe where these concerns may be worked through. This is a traditional timing emphasis, not a specific event forecast.',reasons};
+ }).filter(Boolean);
+ out.innerHTML='<p class="report-timing"><b>'+esc(raw)+'</b> · '+esc(md.lord)+' Mahadasha ('+esc(date(md.start))+'–'+esc(date(md.end))+') · '+esc(ad.lord)+' Antardasha ('+esc(date(ad.start))+'–'+esc(date(ad.end))+')</p><p>'+esc(joint)+'</p>'+
+ factors.map(f=>'<article class="report-section"><h3>'+esc(f.role+': '+f.n)+'</h3><p>'+esc(f.n)+' rules natal '+(f.houses.length?'house '+f.houses.join(' and '):'no assigned whole-sign house')+', and occupies house '+f.h+' in '+fmt(p[f.n])+'. Its sign dispositor '+f.disp+' occupies house '+house(p[f.disp],p.Asc)+'; its nakshatra lord '+f.nakr+' occupies house '+house(p[f.nakr],p.Asc)+'. D1 dignity: '+f.d1+'; D9 dignity: '+f.d9+'.</p><details><summary>Aspect and placement evidence</summary><p>Outgoing aspects: '+esc(f.influenced.join(', ')||'None identified')+'. Received aspects: '+esc(f.incoming.join(', ')||'None identified')+'.</p></details></article>').join('')+
+ '<h3>Period topics</h3>'+(topics.length?topics.map(t=>'<article class="report-section"><h3>'+esc(t.name)+'</h3><p>'+esc(t.text)+'</p><details><summary>Calculation evidence</summary><ul>'+t.reasons.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul></details></article>').join(''):'<p>No direct topic links were identified by the implemented rulership, occupancy and graha-drishti rules.</p>')+
+ '<p class="subtle">Uses natal D1 placements and whole-sign aspects; no transits, event prediction, or complete Shadbala scoring is inferred. Dasha periods use the selected year-length convention. Traditional interpretations are not scientifically established forecasts.</p>';
+}
+$('period-date').value=new Date().toISOString().slice(0,10);
+$('period-date').addEventListener('change',()=>{if(mostRecentChart)renderPeriodReport(mostRecentChart)});
+$('run-period-report').addEventListener('click',()=>{if(mostRecentChart)renderPeriodReport(mostRecentChart)});
 function renderNatalReport(data){
  const target=$('natal-report');if(!target)return;
  const report=buildNatalReport(data);
@@ -627,6 +668,7 @@ renderStrengthFoundation(data);
 renderNadi(data);
 renderJaimini(data);
 renderNatalReport(data);
+renderPeriodReport(data);
 if($('relationship-audit')){$('relationship-audit').innerHTML='<p><b>Shared relationship calculations:</b> '+relationships.conjunctions.length+' same-sign pairs · '+relationships.parashari.length+' directional Parashari sign aspects · '+relationships.jaimini.length+' directional Jaimini sign aspects.</p><p>Whole-sign houses from sidereal ascendant. Computed aspects indicate sign relationships; they do not by themselves establish strength, orb or a yoga. Nadi-inspired sign-connection analysis is provided separately and is not interchangeable with graha drishti.</p>';}
 const results=yogas(p,relationships);for(const y of results)y.review=yogaConditionReview(y,p,relationships);$('yogas').classList.remove('placeholder');$('yogas').innerHTML=results.length?'<p class="subtle">'+results.length+' possible combinations found. These are initial detections, not final strength judgments.</p>'+results.map(y=>'<article class="yoga"><span class="yoga-category">'+esc(y.category)+'</span><h3>'+esc(y.title)+'</h3><p>'+esc(y.reading)+'</p><small><b>Calculation evidence:</b> '+esc(y.proof)+'</small><small class="yoga-caveat"><b>Qualification:</b> '+esc(y.caveat)+'</small><small class="yoga-review"><b>Assessment:</b> '+esc(y.review.status)+'<br><b>Dignity:</b> '+esc(y.review.dignity.join('; ')||'Not applicable')+'<br><b>Support:</b> '+esc(y.review.positive.join('; ')||'None identified by implemented rules')+'<br><b>Cautions:</b> '+esc(y.review.cautions.join('; ')||'None identified by implemented rules')+'<br><b>Received aspects:</b> '+esc(y.review.unassessed.join('; ')||'No additional indicators')+'<br><b>Cancellation:</b> '+esc(y.review.cancellation)+'</small>'+(y.qualifiers?.length?'<small><b>Condition indicators:</b> '+esc(y.qualifiers.join('; '))+'</small>':'')+(y.otherSystems?.length?'<small><b>Other systems (not yoga proof):</b> '+esc(y.otherSystems.join(' '))+'</small>':'')+'</article>').join(''):'<p class="subtle">None of the currently implemented yoga conditions were detected. This does not mean the natal chart has no yogas.</p>'}
 $('birth').addEventListener('submit',e=>{e.preventDefault();$('status').classList.remove('error');try{if(!swe)throw Error('Ephemeris has not initialized');if(selectedLocation?.timezone&&!manuallyEditedOffset){try{refreshOffset()}catch(err){locationStatus.textContent='Automatic UTC lookup failed. Enter the UTC offset manually.'}}const v=Object.fromEntries(new FormData(e.currentTarget).entries());if(v.lat===''||v.lon===''||v.offset===''||!Number.isFinite(Number(v.lat))||!Number.isFinite(Number(v.lon))||!Number.isFinite(Number(v.offset)))throw Error('Please select a city or enter latitude, longitude and UTC offset manually.');const data=chart(v);render(data);$('status').textContent='Calculated successfully · '+data.dt.toISOString()+' · all dates in displayed dashas are UTC calendar dates.'}catch(err){console.error(err);$('status').classList.add('error');$('status').textContent='Calculation error: '+err.message}});
