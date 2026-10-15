@@ -603,6 +603,23 @@ function buildNatalReport(data){
  return {sections,timing,summary:'Sidereal '+Z[ascSign]+' ascendant at '+fmt(p.Asc)+', with Moon at '+fmt(p.Moon)+' in '+nk(p.Moon)+'. These topic analyses combine natal house lordships, planetary dispositors, nakshatra rulers, aspects and selected yoga screening. They represent traditional interpretations, not established future outcomes.'};
 }
 
+function periodLordSynthesis(p,r,major,minor){
+ const a=major.n,b=minor.n,notes=[],proof=[];
+ if(a===b){notes.push('The same planet governs both levels, concentrating this period on its natal responsibilities in house '+major.h+'.');proof.push('Mahadasha and Antardasha share lord '+a);return {notes,proof}}
+ const sa=sign(p[a]),sb=sign(p[b]);
+ const ab=r.parashari.filter(x=>x.source===a&&x.targets.includes(b)),ba=r.parashari.filter(x=>x.source===b&&x.targets.includes(a));
+ if(sa===sb){notes.push(a+' and '+b+' occupy the same sign, so their house rulerships are activated through a shared natal placement in house '+major.h+'.');proof.push('Same sign: '+Z[sa])}
+ if(ab.length&&ba.length){notes.push('The period lords exchange directional planetary aspects, linking their natal rulerships in both directions.');proof.push('Mutual Parashari aspects: '+a+' → '+b+'; '+b+' → '+a)}
+ else if(ab.length||ba.length){const from=ab.length?a:b,to=ab.length?b:a;notes.push(from+' aspects '+to+' by Parashari graha drishti, so one period ruler directly influences the natal placement of the other.');proof.push('Directional aspect '+from+' → '+to)}
+ if(RULERS[sa]===b&&RULERS[sb]===a){notes.push('Their sign dispositors form a two-way exchange, reinforcing links between house '+major.h+' and house '+minor.h+'.');proof.push('Parivartana: '+a+' ↔ '+b)}
+ else if(major.disp===minor.disp&&major.disp!==a&&major.disp!==b){notes.push('Both period lords answer to '+major.disp+' as their shared dispositor, concentrating their effects through natal house '+house(p[major.disp],p.Asc)+'.');proof.push('Shared dispositor: '+major.disp)}
+ else{
+  if(major.disp===b){notes.push(b+' disposits '+a+', giving the Antardasha ruler influence over the Mahadasha lord’s sign placement.');proof.push(b+' is dispositor of '+a)}
+  if(minor.disp===a){notes.push(a+' disposits '+b+', making the Mahadasha lord the sign ruler of the Antardasha lord.');proof.push(a+' is dispositor of '+b)}
+ }
+ if(!notes.length){notes.push('The period rulers do not meet the implemented direct conjunction, exchange or graha-drishti screens. Interpret the two natal house agendas jointly without asserting a special yoga.');proof.push('Separate natal signs and no qualifying direct connection')}
+ return {notes,proof};
+}
 function renderPeriodReport(data){
  const out=$('period-report');if(!out)return;
  const p=data.positions,r=data.relationships,raw=$('period-date').value;
@@ -622,6 +639,7 @@ function renderPeriodReport(data){
   return {n,role:i?'Antardasha':'Mahadasha',h,houses,disp,nakr,influenced:[...new Set(influenced)],incoming:[...new Set(incoming)],d1:planetCondition(n,p),d9:navamsaDignity(n,p[n])};
  });
  const joint=lords[0]===lords[1]?'Both levels are ruled by '+lords[0]+'.':sign(p[md.lord])===sign(p[ad.lord])?'The two period lords share a natal sign.':house(p[md.lord],p[ad.lord])===7?'The period lords occupy opposing natal signs.':'The period lords occupy houses '+factors[0].h+' and '+factors[1].h+'.';
+ const synthesis=periodLordSynthesis(p,r,factors[0],factors[1]);
  const topics=REPORT_TOPICS.map(topic=>{
   const hits=factors.map(f=>({f,hits:f.houses.filter(x=>topic.houses.includes(x)),placement:topic.houses.includes(f.h),aspects:f.influenced.filter(x=>topic.houses.includes(Number(x.split(' ')[1])))}));
   const relevant=hits.some(v=>v.hits.length||v.placement||v.aspects.length);
@@ -633,7 +651,7 @@ function renderPeriodReport(data){
    if(v.aspects.length)links.push('aspects '+v.aspects.join(', '));
    return f.role+' '+f.n+' '+links.join(', ');
   });
-  return {name:topic.title,text:'This period highlights '+topic.title.toLowerCase()+' because '+reasons.join('; ')+'. '+joint+' Assess the two rulers together: their natal placement and dispositors describe where these concerns may be worked through. This is a traditional timing emphasis, not a specific event forecast.',reasons};
+  return {name:topic.title,text:'This period highlights '+topic.title.toLowerCase()+' because '+reasons.join('; ')+'. '+synthesis.notes.join(' ')+' This is an interpretive emphasis, not a guaranteed event.',reasons};
  }).filter(Boolean);
  out.innerHTML='<p class="report-timing"><b>'+esc(raw)+'</b> · '+esc(md.lord)+' Mahadasha ('+esc(date(md.start))+'–'+esc(date(md.end))+') · '+esc(ad.lord)+' Antardasha ('+esc(date(ad.start))+'–'+esc(date(ad.end))+')</p><p>'+esc(joint)+'</p>'+
  factors.map(f=>'<article class="report-section"><h3>'+esc(f.role+': '+f.n)+'</h3><p>'+esc(f.n)+' rules natal '+(f.houses.length?'house '+f.houses.join(' and '):'no assigned whole-sign house')+', and occupies house '+f.h+' in '+fmt(p[f.n])+'. Its sign dispositor '+f.disp+' occupies house '+house(p[f.disp],p.Asc)+'; its nakshatra lord '+f.nakr+' occupies house '+house(p[f.nakr],p.Asc)+'. D1 dignity: '+f.d1+'; D9 dignity: '+f.d9+'.</p><details><summary>Aspect and placement evidence</summary><p>Outgoing aspects: '+esc(f.influenced.join(', ')||'None identified')+'. Received aspects: '+esc(f.incoming.join(', ')||'None identified')+'.</p></details></article>').join('')+
