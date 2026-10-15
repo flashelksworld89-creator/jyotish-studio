@@ -661,7 +661,29 @@ function renderPeriodReport(data){
 $('period-date').value=new Date().toISOString().slice(0,10);
 $('period-date').addEventListener('change',()=>{if(mostRecentChart)renderPeriodReport(mostRecentChart)});
 $('run-period-report').addEventListener('click',()=>{if(mostRecentChart)renderPeriodReport(mostRecentChart)});
+// Only structured chart evidence is sent; birthplace, birth name, coordinates and dates are not sent.
+$('generate-ai-report').addEventListener('click',async()=>{
+ const status=$('ai-report-status'),output=$('ai-report-output'),button=$('generate-ai-report');
+ if(!mostRecentChart){status.textContent='Generate a natal chart first.';return}
+ const report=buildNatalReport(mostRecentChart);
+ const section=report.sections.find(x=>x.title===$('ai-report-topic').value);
+ if(!section){status.textContent='Choose a report topic.';return}
+ button.disabled=true;output.hidden=true;status.textContent='Generating detailed interpretation from the calculated chart evidence…';
+ try{
+  const response=await fetch('/api/report',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({topic:section.title,evidence:section.evidence,summary:report.summary,timing:report.timing})});
+  const payload=await response.json();
+  if(!response.ok)throw Error(payload?.error||'Report generation failed.');
+  output.textContent='';
+  const h=document.createElement('h3');h.textContent=section.title+' — detailed interpretation';output.appendChild(h);
+  for(const paragraph of payload.report.split(/\n\s*\n/).map(v=>v.trim()).filter(Boolean)){
+   const p=document.createElement('p');p.textContent=paragraph;output.appendChild(p);
+  }
+  output.hidden=false;status.textContent='AI interpretation generated. Compare it with the chart evidence below.';
+ }catch(error){status.textContent=error.message+' The rule-based natal report above remains available.'}
+ finally{button.disabled=false}
+});
 function renderNatalReport(data){
+ const aiOutput=$('ai-report-output');if(aiOutput)aiOutput.hidden=true;
  const target=$('natal-report');if(!target)return;
  const report=buildNatalReport(data);
  target.innerHTML='<p>'+esc(report.summary)+'</p><p class="report-timing">'+esc(report.timing)+'</p>'+report.sections.map(section=>'<article class="report-section"><h3>'+esc(section.title)+'</h3><p>'+esc(section.text)+'</p><details><summary>View chart evidence</summary><ul>'+section.evidence.map(line=>'<li>'+esc(line)+'</li>').join('')+'</ul></details></article>').join('')+'<p class="subtle">Report basis: D1 whole-sign placements, Parashari aspect rules, D1/D9 dignity and selected yoga screening. D9 dignity is not used to assert cancellation; incomplete Shadbala components are excluded.</p>';
